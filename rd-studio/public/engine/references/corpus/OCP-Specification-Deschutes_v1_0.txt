@@ -1,0 +1,95 @@
+[PARTIAL EXTRACT — seeded from the project reference database. Regenerate authoritatively with tools/build_corpus.py against the source PDF.]
+
+=== 3.1 Technical specification Summary Table ===
+IT flow (GPM) 500
+Facility flow @ 0.25 GPM/kW 500
+Facility GPM/kW 0.25
+IT dP available (psi) 80-90
+Facility dP (psi) 15-30
+Operating pressure (psig) 0-130
+Thermal load (kW) 2000
+Approach temperature (°C) 3
+Liquids DI water, PG25
+
+=== 3.2 Product requirements ===
+4. N+1 (pump and accessories)
+6. Filtration, front serviceable (25-44 micron)
+7. Side stream (i.e. bypass/parallel) filtration, front serviceable (0.2 micron), ~3 GPM
+8. Spirovent (air separator)
+9. Flow-through expansion tank, front serviceable
+10. Leak rope detection (detected through PLC, 3 zones)
+13. Wetted materials: stainless steel, copper, EPDM
+21. Seismic considerations (bracing, modeling, test)
+22. Operating pressure: 0-130 psi
+23. Pressure relief @ 130 psi
+
+=== 4.2 Mechanical Features ===
+Primary side strainer: 500 um
+Secondary side filtration: 25-44 um
+Secondary side side stream microfiltration: 0.2 um
+Flow-through expansion Tank
+
+=== 5 Performance Specifications ===
+Operating liquid temperature (°C) 18-55
+Thermal load (kW) 2000
+Approach temperature (°C) 3
+
+=== 5.4 Operational Modes ===
+N+1 pump operation, providing redundancy.
+
+=== 6.7 Control System ===
+Controls shall allow for CDUs to be operated in parallel, i.e. hydraulically connected to a common header.
+
+=== 7.2.2 Controllable Parameters via PLC ===
+Pump Speed
+DEFAULT: Fixed pressure drop control -> control pump speed to maintain fixed pressure differential between liquid supply pressure sensor and liquid return sensor
+Primary circuit control valve position
+DEFAULT: Approach temperature control -> control valve opening to maintain fixed approach temperature
+CDU shall be controllable individually or as part of a group of CDUs connected in parallel.
+
+=== 12 Manufacturing ===
+For Project Deschutes it is required to follow the ASME B31.3 standard.
+
+=== 18 Redmond: Hot Aisle Containment (HAC) Interface ===
+Critical Dimensions: These dimensions are essential for the proper physical fit and functionality of the liquid cooling infrastructure.
+Non-Critical (Fungible) Dimensions: These dimensions are provided for reference and may be adjusted by the data center owners to optimize their design, provided they do not interfere with the critical interfaces.
+Structural Qualification for Static and Dynamic Loads: The data center owner is solely responsible for engaging qualified structural engineers to perform all necessary analyses and design work to ensure the structural integrity of the facility
+
+=== 18.1 IT Rack Dimensions ===
+Rack Width: 28" (711 mm)
+Rack Depth: 50" (1270 mm) max
+Rack Height: Min 80.7" (2050mm), Max 90.55" (2300 mm)
+Packaged Height: 100" (2540 mm)
+
+=== 18.2 Redmond HAC Interface ===
+Cold Aisle width 54" (1372mm) minimum
+Hot Aisle width 68.4" (1737mm) minimum with RHx (measured between rear RHx faces)
+102" (2210mm) maximum without RHx (measured between rear rack faces)
+Min bay width 121" (3073.36mm)
+Min row length 46' (14.02m)
+Transport aisle width 6ft (1800mm) clearance in at least 1 transport row
+10ft (3.048m) clearance in the other transport row
+Min ceiling height 14' (4.26m)
+
+=== 18.3 Floor Layout ===
+Each bay permits four 28" wide IT racks to be deployed on each side of the hot aisle, with a 5 mm gap between the neighboring racks. The bay is bounded by four vertical posts, which are 5" by 5" in size. The available width between the base plates is 114" which is sufficient to deploy four IT racks.
+
+=== 18.4 Elevations ===
+Level 1: "Project Deschutes" Wall Manifold (WMF) pipes. Elevation: 100.5".
+Level 2: cabling, Elevation: 115.5"
+Level 3: cabling. Elevation: 127.5"
+Level 4: cabling. Elevation: 139.5"
+All these four elevations are critical, i.e. cannot be changed.
+The space above the fourth elevation (139.5") is available to the Colo providers for any items not shown here, such as the PCW piping for RDHx.
+
+=== 19.4.5 Finite Element Analysis ===
+Seismic loading as per ASCE (Americal Society for Civil Engineers) 7-16 for Sds 2.273; Eqv static design loading: lateral acc V 0.9g, vertical acc Av 0.45g
+
+=== 23.2.2 Wall-Manifold (WMF) overview ===
+Multiple piping segments: These are about 3 meters long, shipped in crates, and assembled on-site to create wall manifolds up to 30 meters or more in total length.
+A drip tray: This catches and redirects any small leaks from the wall manifolds.
+Piping Inner diameter: of 4 inches (or larger)
+Maximum Temperature of coolant in wall manifold 55 °C
+Minimum Temperature of coolant in wall manifold 15 °C
+Maximum working pressure for wall manifold: 130 psi
+Maximum differential pressure (between manifold supply and return): 80-90 psi

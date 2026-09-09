@@ -1,0 +1,12 @@
+{
+  "PipeTypeName": "CONFIGURE: native pipe type with matching catalogue sizes",
+  "PipeTypesByMaterial": {
+    "stainless_sch10": "CONFIGURE: stainless steel schedule 10S",
+    "carbon_steel_sch40": "CONFIGURE: carbon steel schedule 40",
+    "copper_type_l": "CONFIGURE: copper type L"
+  },
+  "LevelName": "Level 1",
+  "MechanicalEquipmentTemplate": "C:\\ProgramData\\Autodesk\\RVT 2027\\Family Templates\\English\\Metric Mechanical Equipment.rft",
+  "PositionToleranceM": 0.001,
+  "BoreToleranceM": 0.0001
+}

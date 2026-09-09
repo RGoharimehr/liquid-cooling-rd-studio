@@ -1,0 +1,17 @@
+[PARTIAL EXTRACT — seeded from the project reference database. Regenerate with tools/build_corpus.py.]
+
+=== 3.4 TCS Flow Considerations ===
+Flow Velocity Limits: Stainless steel is resistant to corrosion but susceptible to erosion-corrosion at high flow velocities, particularly in turbulent areas (e.g. bends, fittings). Flow velocity limit of 2.7 m/s (9 ft/s) aligns with widely accepted industry guidelines for process piping where TCS fluid is maintained within recommended standards. Erosion may become a concern for flows > 3 m/s.
+
+=== 3.5 TCS Pipe Selection Considerations ===
+Thermal performance range (20 °C/68 °F-70 °C/158 °F)
+
+=== Appendix E: Considerations for TCS Module Size & Valving ===
+The addition of a valve between each module enables the isolation and removal of individual modules. Using dual valves between each module enables the maintenance of the valves and reduces the risks of relying on a single valve for module maintenance.
+
+=== Appendix F: Structural ===
+Rack, Cable and Equipment Clearance: Maintain adequate clearance between the pipe system and data center racks, as well as any equipment mounted on the racks, to prevent interference or damage.
+Leak Detection and Prevention: Location of piping and integration of drip trays and leak detection requires significant evaluation.
+
+=== Appendix G: Commissioning Considerations ===
+TCS systems have exceptional requirements in cleanliness (25 u filtration), integrity (no leakage) and performance.

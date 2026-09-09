@@ -1,0 +1,20 @@
+{
+  "OCP-Specification-Deschutes_v1_0.txt": {
+    "source_pdf": "OCP-Specification-Deschutes v1_0.pdf",
+    "sha256": null,
+    "partial": true,
+    "note": "Hand-seeded partial extract of the cited sections. Evidence checks against it are INDICATIVE, not authoritative. Run tools/build_corpus.py against the source PDF to make them authoritative."
+  },
+  "2025_Modular_TCS_CloudScale_Rev_1_March.txt": {
+    "source_pdf": "2025 Modular TCS  CloudScale Design Delivery Selection Guidance  Rev 1 March.pdf",
+    "sha256": null,
+    "partial": true,
+    "note": "Hand-seeded partial extract of the cited sections."
+  },
+  "ASHRAE_TC99_liquid_cooling.txt": {
+    "source_pdf": "multiple ASHRAE TC 9.9 liquid cooling chapters and bulletins",
+    "sha256": null,
+    "partial": true,
+    "note": "Hand-seeded partial extract spanning Ch02, Ch04, Ch07, Ch10, Ch11 and the TC 9.9 bulletins."
+  }
+}

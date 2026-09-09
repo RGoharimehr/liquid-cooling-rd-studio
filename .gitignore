@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.wrangler/
+.next/
+.vinext/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.tsbuildinfo
+.env*
+.venv/
+outputs/
+.DS_Store
+revit/bin/
+revit/obj/
+.venv*/
+.idea/

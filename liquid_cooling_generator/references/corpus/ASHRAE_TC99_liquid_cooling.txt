@@ -1,0 +1,31 @@
+[PARTIAL EXTRACT — seeded from the project reference database. Regenerate with tools/build_corpus.py.]
+
+=== Ch02 Facility Cooling Systems, 2.1.5 Ease of Maintenance and Troubleshooting ===
+The first element of this planning should be to maintain adequate working clearance around cooling equipment. Manufacturers' recommendations for working clearances should be used as a minimum for serviceability areas. Designers need to provide access to allow maintenance and operation of valves, control devices and sensors, and large equipment.
+
+=== Ch02, 2.3.2 Volume Expansion ===
+A separate expansion compensation system in both the FWS and the TCS may be included in the design of the piping system to help stabilize the pressure in the system.
+
+=== Ch04 Coolant Distribution Unit, 4.2.2 CDU Reliability ===
+CDU implementations must be redundant and fault tolerant. The most likely point of failure in a CDU is the coolant pump. Most CDUs will have redundant pumps.
+
+=== Ch07 Fluids and Fluid Quality, 7.1 ===
+Many cold plate solutions today use dimensions on the order of 100 microns (0.0039 in). A general guideline for the TCS systems is a filter of 50 microns.
+
+=== Ch07, Table 7.2 Common wetted materials found in FWS and TCS loops ===
+Carbon steel: FWS only. For use with FWS solutions that use a CDU only. Carbon steels may be used in the FWS provided that steel-specific corrosion inhibitor(s) are added to the system and proper inhibitor concentration is maintained.
+Copper: FWS and TCS. Stainless steel, solution treated and passivated: FWS and TCS.
+
+=== Ch10 Transitioning to Liquid Cooling, 10.2.1 ===
+Sufficient overhead clearance should be provided for removal of the server and the associated rigging equipment to handle the servers.
+
+=== Ch11 Additional Considerations, seismic ===
+As an example, the joints between a TCS loop and a rack could be damaged during a seismic event if flexible piping is not used.
+
+=== TCS Coolant Integrity and System Readiness Best Practices, Air Management ===
+Locate air separation where fluid temperature is relatively high and pressure is relatively low (often on the return line near the CDU inlet and pump suction).
+Provide manual/automatic vents at separators and at known high points.
+Avoid geometries that trap air (vertical dead legs, inverted "U" bends, localized high points without venting).
+
+=== Liquid Cooling Resiliency Guidance, Design Recommendation 3 ===
+Incorporate active redundancy to maintain cooling during changeover from primary to redundant systems.

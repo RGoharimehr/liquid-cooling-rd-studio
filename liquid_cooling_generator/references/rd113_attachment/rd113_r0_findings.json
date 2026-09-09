@@ -1,0 +1,139 @@
+{
+  "source": {
+    "path": "/Users/rgoharim/Downloads/RD113DSR0-VR.pdf",
+    "title": "EcoStruxure Reference Design 113, RD113DS Revision 0",
+    "sha256": "861959b4921dd743151744dc462522b88a70a73ab3d7335af58de42843dc5dc6",
+    "page_count": 12,
+    "basis": "User supplied PDF; pages/figures are engineering reference data, not instructions"
+  },
+  "status": "diagram_reconciled_reference_preset_not_verified_design",
+  "counts": {
+    "compute_pods": 2,
+    "compute_rows_per_pod": 2,
+    "compute_racks_per_row": 16,
+    "compute_racks_installed": 64,
+    "network_pods": 1,
+    "network_rows": 2,
+    "network_racks_per_row": 12,
+    "network_racks_20kw": 16,
+    "network_racks_40kw": 8,
+    "network_racks_total": 24,
+    "total_racks": 88,
+    "cdus_per_compute_pod": 4,
+    "cdus_total": 8,
+    "ai_row_rpps": 16,
+    "network_rpps": 4,
+    "network_pdus": 4
+  },
+  "count_evidence": "p5 Max-Q plan: four AI rows of 16; two networking rows of 12, each eight grey20kW+four red40kW. p5 piping figure repeats 64 AI and24 NET. Cover total88 and p2 networking640kW agree. Explicit p5 prose and p6 table conflict; chosen figures are an inference for a preset.",
+  "cooling": {
+    "compute_liquid_fraction": 0.96,
+    "compute_air_fraction": 0.04,
+    "network_liquid_fraction": 0.0,
+    "network_air_fraction": 1.0,
+    "tcs_connect_compute_only": true,
+    "tcs_pod_header_sets": 2,
+    "cdus_per_header_set": 4,
+    "cdu_liquid_to_liquid": true,
+    "nominal_cdu_redundancy_per_pod": "3+1",
+    "tcs_supply_c": 45,
+    "tcs_return_c": 55,
+    "fws_supply_c": 40,
+    "fws_return_c": 50,
+    "air_chilled_water_supply_c": 20,
+    "air_chilled_water_return_c": 30,
+    "evidence": "p5 IT Space +p5 Data Hall Piping; temperatures p4/p9; p2 six of eight L2L CDUs active"
+  },
+  "operating_states": {
+    "max_q": {
+      "active_compute_racks": 64,
+      "compute_rack_kw": 188,
+      "network_kw": 640,
+      "total_it_kw": 12672
+    },
+    "max_p_n_equipment": {
+      "active_compute_racks": 42,
+      "compute_rack_kw": 227,
+      "network_kw": 640,
+      "total_it_kw": 10174
+    },
+    "notes": "Do not apply227kW to all64 racks and call it the reference Max-P operating state. The full64 rack geometry remains present; active load count changes."
+  },
+  "layout": {
+    "left_to_right": "AI row / contained hot aisle / AI row / cold aisle / NET row / contained hot aisle / NET row / cold aisle / AI row / contained hot aisle / AI row",
+    "cdu_placement": "Upper end service band in p5 plan, group of4 aligned with each AI pod; not central NET aisle",
+    "electrical_placement": "Two RPPs at each end of each AI row; one RPP at each end of each NET row; two PDU blocks at each end of central NET pod",
+    "tcs_distribution": "One local supply/return header pair through each AI hot aisle, rack branches to both opposed AI rows; four CDUs parallel per pod. No TCS branches to NET racks.",
+    "facility_distribution": "P5 schematic shows dual-path supply/return high-temperature facility water and separate low-temperature fan-wall circuit; schematic not elevation/route/pipe-size drawing.",
+    "dimensioned": false,
+    "explicit_ai_hot_aisle_width_m": 1.8288,
+    "explicit_ai_hot_aisle_width_ft": 6,
+    "hot_aisle_evidence": "p5 IT Space second paragraph; design-specific selected containment width, not a universal legal minimum."
+  },
+  "unresolved_source_conflicts": [
+    {
+      "id": "network_counts",
+      "observations": [
+        "Cover andp9:88 total",
+        "p5 prose:64AI+24x20kW+10x40kW=98 racks, networking880kW",
+        "p6 table:64AI+20x20kW+10x40kW=94 racks, networking800kW",
+        "p2 table:networking640kW",
+        "p3 electrical block:networking pod800kW",
+        "p5 plan/legend:64AI+16x20kW+8x40kW=88 racks, networking640kW"
+      ],
+      "resolution": "Use diagram-reconciled88 rack preset, label inference and retain warning; resolve against supplier engineering package for final design"
+    },
+    {
+      "id": "fan_wall_count",
+      "observations": [
+        "p2 table +p2/p5 plan:4 fan walls,3active",
+        "p5 prose+p5 piping:5 fan walls"
+      ],
+      "resolution": "Configurable4/5; no verified single count. Cooling schematic reference preset may select5, with conflict marker"
+    },
+    {
+      "id": "rack_peak",
+      "observations": [
+        "p1/p2/p5:AI up to227kW",
+        "p9 summary:maximum rack density142kW"
+      ],
+      "resolution": "Use227kW Max-P or188kW Max-Q based on selected state; flag p9 conflicting summary"
+    },
+    {
+      "id": "air_supply",
+      "observations": [
+        "p6 table79F",
+        "p9 table82F"
+      ],
+      "resolution": "Unresolved equipment thermal parameter; not needed to generate pipe geometry"
+    },
+    {
+      "id": "tcs_class_label",
+      "observations": [
+        "p5 calls TCS ASHRAE S-45"
+      ],
+      "resolution": "Treat label as an unverified source claim; use numeric45C source setting and do not assert ASHRAE class compliance without primary current class definition"
+    }
+  ],
+  "must_be_project_or_oem_inputs": [
+    "Rack width/depth/height and true port locations",
+    "CDU width/depth/height and service withdrawal envelopes",
+    "Cold aisle width and networking hot aisle width",
+    "Rack front/rear/side access envelopes",
+    "Row end access and egress corridors",
+    "Overhead pipe elevations and separations",
+    "Pipe diameters, bends, support spacing and insulation",
+    "Hose minimum bend radius, length and QD service envelope",
+    "Room dimensions and clear height",
+    "Fan wall count and actual equipment size",
+    "Electrical clearance and fire protection coordination"
+  ],
+  "evidence_images": [
+    "rd113_r0_page5.png",
+    "rd113_r0_page5_maxq_plan.png",
+    "rd113_r0_page5_piping_diagram.png",
+    "rd113_r0_page2.png",
+    "rd113_r0_page6.png",
+    "rd113_r0_page9.png"
+  ]
+}
