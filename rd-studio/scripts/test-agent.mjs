@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {buildContext,configStamp,localEndpoint,parseReply,proposedConfig,reviewDesign,localModels,askLocal} from '../lib/design-agent.ts';
+import {buildContext,configStamp,localEndpoint,parseReply,proposedConfig,reviewDesign,localModels,askLocal,importConfig} from '../lib/design-agent.ts';
 const {parameters:fields,presets}=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
 const graph=JSON.parse(readFileSync(new URL('../public/initial-graph.json',import.meta.url)));
 const base=graph.metadata.config;
@@ -45,6 +45,12 @@ test('Only supplied source IDs are accepted',()=>{
 });
 test('Review distinguishes pending parameters, manual dimensions and unverified imports',()=>{
  const report=reviewDesign(graph,true).join(' ');assert.match(report,/Pending/);assert.match(report,/manual/);assert.match(report,/unverified/);
+});
+test('Legacy imports preserve an explicit plant type while defaulting missing values',()=>{
+ const water=importConfig(presets.compact.config,{rows:3,plant_type:'water_cooled'});
+ assert.equal(water.schema_version,2);assert.equal(water.plant_type,'water_cooled');assert.equal(water.rows,3);
+ const legacy=importConfig(presets.compact.config,{rows:2});
+ assert.equal(legacy.schema_version,2);assert.equal(legacy.plant_type,'boundary');
 });
 const original=globalThis.fetch;
 try{

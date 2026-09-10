@@ -31,6 +31,10 @@ export function editInputs(base:DesignConfig,patch:DesignConfig){
  if('network_rows' in patch||'network_racks_per_row' in patch){const total=Number(next.network_rows)*Number(next.network_racks_per_row);if(Number(next.network_high_power_count)>total){next.network_high_power_count=total;notes.push('High-power network count reduced to the installed rack count.');}}
  return {config:next,notes:[...new Set(notes)]};
 }
+export function importConfig(base:DesignConfig,data:DesignConfig):DesignConfig {
+ const schemaVersion=Number(data?.schema_version);
+ return {...base,...data,...(Number.isFinite(schemaVersion)&&schemaVersion>0?{}:{schema_version:2}),...('plant_type' in data?{}:{plant_type:'boundary'})};
+}
 export function configStamp(value:unknown):string {
  if(Array.isArray(value))return '['+value.map(configStamp).join(',')+']';
  if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+configStamp((value as DesignConfig)[k])).join(',')+'}';
