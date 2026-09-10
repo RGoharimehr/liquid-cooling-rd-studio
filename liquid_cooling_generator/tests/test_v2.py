@@ -57,6 +57,23 @@ class ContractV2Tests(unittest.TestCase):
   self.assertEqual(run(g,c,p)['blocking_failures'],[])
   assignments=[2,1,2,1];changed,_=build(replace(c,row_pod_assignments=assignments,cdu_pod_assignments=assignments))
   self.assertEqual(changed['metadata']['pod_assignments']['rows'],assignments)
+ def test_active_generator_expands_redundancy_scenarios(self):
+  c=replace(self.c,cdu_count=4,redundancy=2,ceiling_height_m=6.5,plant_type='water_cooled');g,_=build(c)
+  self.assertEqual(g['metadata']['redundancy']['duty_units'],2)
+  self.assertEqual(g['metadata']['redundancy']['capacity_per_cdu_W'],g['couplings'][0]['design_capacity_W'])
+  design=[s for s in g['scenarios'] if s['kind']=='design']
+  self.assertEqual(len(design),6)
+  self.assertEqual({tuple(s['active_cdus']) for s in design},{(1,2),(1,3),(1,4),(2,3),(2,4),(3,4)})
+  for scenario in design:
+  offline=sorted(set(range(1,c.cdu_count+1))-set(scenario['active_cdus']))
+  disabled={x for index in offline for x in g['couplings'][index-1]['component_ids']}
+  closed={x for index in offline for x in g['couplings'][index-1]['isolation_components']}
+  self.assertEqual(set(scenario['disabled_components']),disabled)
+  self.assertEqual(set(scenario['closed_components']),closed)
+  for index,coupling in enumerate(g['couplings'],1):
+  self.assertEqual(coupling['scenario_heat_W']['all_online'],coupling['heat_W'])
+  self.assertEqual(sum(value>0 for name,value in coupling['scenario_heat_W'].items() if name!='all_online'),3)
+  self.assertEqual(max(coupling['scenario_heat_W'].values()),g['metadata']['redundancy']['capacity_per_cdu_W'])
  def test_migration_stable_identity_and_parameter_effects(self):
   self.assertEqual(Config.from_dict({'rows':2}).plant_type,'boundary')
   changed,p=build(replace(self.c,rack_pitch_m=.95,layout_rotation_deg=30))

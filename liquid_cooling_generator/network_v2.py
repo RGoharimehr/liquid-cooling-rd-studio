@@ -4,6 +4,7 @@ Routes use finite fitting takeoffs; equipment internals are functional graph
 paths, never extruded as pipes. No pressure/network solver is used.
 """
 from dataclasses import asdict
+from itertools import combinations
 from math import dist, cos, sin, radians
 from topology import Builder
 
@@ -124,7 +125,7 @@ class NetworkBuilder(Builder):
             comp['service']=service;e=self.edge(comp,a,b,kind,self.fixed(0));e['internal']=True
         comp['service']='EQUIPMENT';comp['circuit_id']='MULTI';comp['pod']=self.current_pod
         self.g['couplings'].append({'id':cid,'primary_component':cid,'secondary_component':cid,'primary_ports':[ports['fs'],ports['fr']],
-            'secondary_ports':[ports['tr'],ports['ts']],'heat_W':self.rows.count(self.current_pod)*c.racks_per_row*c.rack_power_W*c.liquid_fraction/self.cdus.count(self.current_pod),'design_capacity_W':None,
+            'secondary_ports':[ports['tr'],ports['ts']],'heat_W':self.rows.count(self.current_pod)*c.racks_per_row*c.rack_power_W*c.liquid_fraction/self.cdus.count(self.current_pod),'design_capacity_W':self.h['cdu_duty_heat_W'],
             'mass_transfer_kg_s':0.,'isolation_components':ivs,'component_ids':[cid]+ivs,'heat_basis':'Aggregate load allocation; equipment capacity not validated'})
 
     def distribution_pods(self):
@@ -206,10 +207,20 @@ def generate(c,profile):
     if c.plant_type!='boundary':
         from plant import add_plant
         add_plant(b)
+    units=list(range(1,c.cdu_count+1))
+    b.g['scenarios']=[{'name':'all_online','kind':'operating','active_cdus':units,'control_assumption':'Flow is unassigned in manual mode; equal sharing is only a sizing assumption'}]
+    for offline in combinations(units,c.redundancy):
+        inactive=[b.g['couplings'][i-1] for i in offline]
+        b.g['scenarios'].append({'name':'duty_'+('_'.join(map(str,offline)) or 'all'),'kind':'design',
+            'active_cdus':[i for i in units if i not in offline],
+            'closed_components':[x for q in inactive for x in q['isolation_components']],
+            'disabled_components':[x for q in inactive for x in q['component_ids']],
+            'control_assumption':'Sizing assumption only; operating flow allocation belongs to downstream software'})
+    for i,coupling in enumerate(b.g['couplings'],1):
+        coupling['scenario_heat_W']={s['name']:(b.h['total_heat_W']/len(s['active_cdus']) if i in s['active_cdus'] else 0.) for s in b.g['scenarios']}
     b.g['metadata']['pod_assignments']={'rows':b.rows,'cdus':b.cdus}
     b.g['metadata']['standards']=profile.manifest()
-    b.g['metadata']['redundancy']={'total_units':c.cdu_count,'duty_units':c.cdu_count-c.redundancy,'spare_units':c.redundancy,'scope':'Connectivity/isolation only; no capacity or pressure verification'}
-    units=list(range(1,c.cdu_count+1))
-    b.g['scenarios']=[{'name':'all_online','kind':'operating','active_cdus':units},{'name':'design','kind':'design','active_cdus':units}]
+    b.g['metadata']['redundancy']={'total_units':c.cdu_count,'duty_units':c.cdu_count-c.redundancy,'spare_units':c.redundancy,
+        'capacity_per_cdu_W':b.h['cdu_duty_heat_W'],'scope':'CDU unit outages only; common supply/return headers are single points of failure'}
 
     return b.g
