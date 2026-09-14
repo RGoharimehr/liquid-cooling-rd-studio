@@ -1,0 +1,97 @@
+# Every step here was run to completion before this file was committed. A
+# workflow that is red on arrival teaches people to ignore it, so nothing goes
+# in until it has passed on the same versions CI uses.
+name: checks
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+# A newer push supersedes an older run on the same branch.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: Engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: liquid_cooling_generator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # ifcopenshell comes with requirements-dev and enables the IFC schema,
+      # EXPRESS-rule and port-identity tests. Without it those six skip rather
+      # than fail, so the run stays honest either way.
+      - name: Install
+        run: python -m pip install --upgrade pip && python -m pip install -r ../requirements-dev.txt
+
+      - name: Tests
+        run: python -m pytest tests -q
+
+      # The engine against first principles: re-derives every number from the
+      # graph's own data without importing any calculation code.
+      - name: Acceptance harness
+        run: python validate_design.py --all-presets
+
+      # The engine against published reference designs. Fails only on a
+      # difference nobody has examined; an adjudicated one stays visible.
+      - name: Reference benchmarks
+        run: python benchmark.py --all
+
+  studio:
+    name: Studio
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: rd-studio/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+        working-directory: rd-studio
+
+      # The browser runs a copy of the engine. Re-syncing and finding a diff
+      # means the committed copy is stale, so the studio would run different
+      # code from the CLI.
+      - name: Browser engine copy is current
+        run: |
+          python3 rd-studio/scripts/sync-engine.py
+          git diff --exit-code -- rd-studio/public || {
+            echo '::error::The committed browser engine copy is stale. Run rd-studio/scripts/sync-engine.py and commit the result.'
+            exit 1
+          }
+
+      - name: Types
+        run: npm exec tsc -- --noEmit
+        working-directory: rd-studio
+
+      - name: Agent, finder and plan-editor tests
+        working-directory: rd-studio
+        run: |
+          node scripts/test-agent.mjs
+          node scripts/test-finder.mjs
+          node scripts/test-zone-interaction.mjs
+          node scripts/test-zone-draft.mjs
+
+      # Drives the real Pyodide worker over all three presets.
+      - name: Engine in the browser worker
+        run: node scripts/test-engine.mjs
+        working-directory: rd-studio
+
+      - name: Production build
+        run: npm run build
+        working-directory: rd-studio
