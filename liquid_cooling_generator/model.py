@@ -428,11 +428,24 @@ def empty_graph(config: Config) -> dict:
 def build_profile(config: 'Config'):
     """Resolve the standards profile for this configuration."""
     from dataclasses import replace
-    p=standards.Profile.default()
+    p=standards.Profile.default().for_design(
+        standards.PROFILES.get(getattr(config,'standards_profile','project'),standards.PROFILES['project']))
     p.config=config
     mapping={'rack_width_m':'rack_width_m','rack_depth_m':'rack_depth_m','header_supply_elevation_m':'header_elevation_m','return_elevation_offset_m':'return_elevation_offset_m','header_half_separation_m':'header_half_separation_m','manifold_elevation_m':'manifold_elevation_m','ceiling_height_min_m':'ceiling_height_m','rack_front_service_m':'rack_front_clearance_m','rack_rear_service_m':'rack_rear_clearance_m','cdu_service_clear_m':'cdu_service_clearance_m','overhead_rigging_clear_m':'overhead_clearance_m','vent_at_high_point':'include_vents','drain_at_low_point':'include_drains','support_at_fitting':'include_supports','flexible_connection_at_rack':'include_flex_connectors','leak_detection_at_rack':'include_leak_detection','drip_tray_under_piping':'include_drip_trays'}
     for key,field in mapping.items():
-        if key in p.params:p.params[key]=replace(p.params[key],value=getattr(config,field))
+        if key not in p.params:continue
+        old=p.params[key];value=getattr(config,field)
+        if old.value==value:continue
+        # Overriding a parameter the selected body governs is a declared
+        # deviation, not a silent substitution.
+        if key in p.design.governs:
+            p.deviations.append({'key':key,'from':old.value,'to':value,'status':old.status,
+                'source':old.source,'clause':old.clause,
+                'note':f'{p.design.label} governs this dimension; the configuration sets a different value.'})
+            p.params[key]=replace(old,value=value,note=(old.note+' [OVERRIDDEN against the governing profile]').strip())
+        else:
+            p.params[key]=replace(old,value=value,status='assumption',source=old.source or '-',
+                note=(old.note+' [project input]').strip())
     for name,cat in list(p.categories.items()):
         branch=name in ('tcs_rack','tcs_row_branch') or ('branch' in name)
         material=config.fws_material if cat.service=='FWS' else (config.tcs_branch_material if branch else config.tcs_header_material)

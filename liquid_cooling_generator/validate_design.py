@@ -543,6 +543,30 @@ def check_attention(graph, report):
                not stray, sorted(stray), sorted(categories))
 
 
+def check_standards_profile(graph, report):
+    """A dimension may only be called critical by the body that governs it."""
+    manifest = graph['metadata'].get('standards', {})
+    design = manifest.get('design_profile')
+    parameters = manifest.get('parameters', {})
+    if not design:
+        report.add('profile', 'the model records which body governs it', False, None, 'a design_profile block')
+        return
+    governs = set(design['governs'])
+    stray = sorted(k for k, v in parameters.items() if v['status'] == 'critical' and k not in governs)
+    report.add('profile', 'only governed parameters are marked critical',
+               not stray, stray[:4], [],
+               f"profile {design['name']!r} governs {len(governs)} parameters; a critical mark outside that "
+               'set attributes a mandate to a document the design did not select')
+    misattributed = sorted(k for k in governs
+                           if k in parameters and parameters[k]['source'] != design['body'])
+    report.add('profile', 'every governed parameter is attributed to the governing body',
+               not misattributed, misattributed[:4], [], f"expected {design['body']!r}")
+    report.add('profile', 'the design does not contradict the dimensions its profile governs',
+               not graph['metadata'].get('standards', {}).get('critical_deviations'),
+               graph['metadata'].get('standards', {}).get('critical_deviations') or 'none', 'none',
+               'a deviation here means the configuration and the cited reference disagree')
+
+
 def check_artifact_agreement(graph, report):
     """Two blocks in one file must not answer the same question differently."""
     sizing = graph['metadata'].get('preliminary_sizing') or {}
@@ -688,6 +712,7 @@ def validate(graph, report, config_dict=None, build=None, do_sweep=False):
     check_geometry(graph, report)
     check_artifact_agreement(graph, report)
     check_attention(graph, report)
+    check_standards_profile(graph, report)
     check_redundancy(graph, report)
     if do_sweep and config_dict and build:
         sweep(config_dict, report, build)

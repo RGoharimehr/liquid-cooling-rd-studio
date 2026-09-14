@@ -117,7 +117,12 @@ PRESETS={
  'rd113':{'label':'RD113 R1 · equipment-list reference','description':'64 AI racks at the Max-Q 188 kW rack power, 32 networking racks totalling 880 kW, 8 Motivair MCDU-70 CDUs in two pods, 4 Uniflair fan walls. Counts, equipment and operating temperatures follow the supplied RD113 R1 documents; see references/rd113_r1. Pipe sizes, pump duties and valve coefficients are not published in that set and remain this generator\'s own estimates.','config':{**DEFAULT,'rows':4,'racks_per_row':16,'rack_power_W':188000.,'layout_style':'central_network',
   # The generic default bores belong to a 4 MW hall. Left on manual this preset
   # ships pipes far too small for its own load, so it selects its own sizes.
-  'sizing_mode':'preliminary','cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r1','network_aisle_m':1.8288,
+  'sizing_mode':'preliminary',
+  # RD113_4.2 R1: NetShelter Open Architecture MGX, 600 mm wide, 1200 mm deep,
+  # 48U - for both the AI and the networking racks. The preset previously
+  # carried the 711 mm OCP Deschutes rack, which the profile now reports as a
+  # deviation from the dimensions RD113 actually publishes.
+  'rack_width_m':.6,'rack_depth_m':1.2,'cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r1','network_aisle_m':1.8288,
   # RD113_2.5 R1: 8 SMN + 8 N/S at 15 kW, 8 CME at 35 kW, 8 CIN at 45 kW = 32
   # racks, 880 kW. The generator supports one base power plus one high-power
   # band, so the 16 high racks carry their exact 40 kW average (8x35 + 8x45).

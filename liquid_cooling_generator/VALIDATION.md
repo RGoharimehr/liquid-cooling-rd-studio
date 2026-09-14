@@ -475,3 +475,55 @@ governs each class of parameter, and `standards_profile` should either select a
 parameter set or be removed as a false affordance. The profile value is at least
 no longer stale: `rd113_r0` is now `rd113_r1`, with the old value migrated.
 
+## Design profiles: one body governs, the rest is assumption
+
+The finding above — three cited philosophies, one merged parameter set — is now
+fixed rather than recorded. `standards.PROFILES` names, per design, the
+parameters its body genuinely mandates:
+
+| Profile | Governs | Body |
+| --- | --- | --- |
+| `project` | nothing | no reference module governs; every dimension is a project assumption |
+| `deschutes_module` | 22 rack, aisle and header-band dimensions | OCP Deschutes, which marks them critical itself |
+| `rd113_r1` | 3: rack width, rack depth, AI hot aisle | Schneider RD113, which defers everything else to the project |
+
+`build_profile` applies the selected profile before the configuration overrides,
+and demotes every critical dimension the profile does not govern to an
+assumption — the original source stays on the parameter as provenance, so
+nothing is hidden. What changes is the claim.
+
+Before, an RD113 design reported this:
+
+    rack_width_m         0.7112   critical    OCP-Specification-Deschutes v1_0
+    row_length_min_m    14.0208   critical    OCP-Specification-Deschutes v1_0
+
+A Schneider layout built on 23 OCP dimensions, each stamped as a mandate from a
+document it never selected. Now:
+
+    rack_width_m         0.6000   critical    Schneider Electric EcoStruxure RD113
+    row_length_min_m    14.0208   assumption  OCP-Specification-Deschutes v1_0
+
+Overriding a parameter the selected body *does* govern is recorded as a critical
+deviation rather than substituted silently. That is what caught the last error
+in the RD113 preset: it carried the 711 mm Deschutes rack while RD113_4.2 R1
+names a 600 × 1200 mm NetShelter MGX. Two deviations, now zero.
+
+The decision-register gate reads the selected profile's document instead of
+naming Deschutes, so it generalises to any reference design with a corpus entry.
+
+`validate_design.py` gains three checks: only governed parameters may be marked
+critical, every governed parameter is attributed to its governing body, and a
+design must not contradict the dimensions its own profile governs.
+
+## A standard way to add a reference design
+
+`references/PRESET_AUTHORING.md` is the procedure, in five artifacts: the
+extraction with a hash per document and an explicit `not_published` list, the
+design profile declaring what the body governs, the preset with a source comment
+on every published value, the benchmark where each difference is adjudicated or
+fails, and the equipment ratings for the capacity screen. All three harnesses
+green before a preset counts as real.
+
+The point of writing it down is that the next Schneider sub-design should be
+cheap and should not inherit anyone else's mandates.
+

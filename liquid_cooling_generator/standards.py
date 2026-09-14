@@ -207,6 +207,67 @@ INSTALL = {
 }
 
 
+# ------------------------------------------------------ design profiles ----
+# Which body actually governs this design, and which parameters it mandates.
+#
+# Before this existed, `Profile.default()` merged every parameter from every
+# cited source into one set and handed it to every design. A Schneider RD113
+# layout was built on 23 OCP Deschutes dimensions, each still stamped 'critical'
+# and attributed to a document that does not govern it. The values were right
+# because the configuration overrode them; the provenance was not.
+#
+# A profile does two things: it names the parameters its body genuinely mandates
+# and supplies their values, and it demotes every other critical dimension to an
+# assumption, because a mandate from a document you did not select is guidance at
+# best. Nothing is hidden - the original source stays on the Param as provenance.
+
+
+@dataclass(frozen=True)
+class DesignProfile:
+    name: str
+    label: str
+    body: str
+    document: str              # corpus document id; empty when no document governs
+    governs: frozenset         # parameter keys this body mandates for this design
+    values: dict               # the values it mandates, for keys it governs
+    clause: str = ''
+    note: str = ''
+
+
+PROFILES = {
+    'project': DesignProfile(
+        name='project', label='Project design', body='This project', document='',
+        governs=frozenset(), values={},
+        note='No reference module governs this design. Every dimension is a project assumption, '
+             'informed by the cited guidance but not bound by it.'),
+    'deschutes_module': DesignProfile(
+        name='deschutes_module', label='OCP Deschutes module', body=D,
+        document='OCP-Specification-Deschutes_v1_0',
+        # The spec itself marks these critical: change one and a Deschutes module
+        # no longer physically interoperates.
+        governs=frozenset({'rack_width_m', 'rack_depth_m', 'rack_height_min_m', 'rack_height_max_m',
+                           'rack_gap_m', 'racks_per_bay_side', 'bay_width_min_m', 'row_length_min_m',
+                           'post_size_m', 'cold_aisle_width_m', 'hot_aisle_width_m', 'hot_aisle_max_m',
+                           'transport_aisle_a_m', 'transport_aisle_b_m', 'rack_front_service_m',
+                           'rack_rear_service_m', 'manifold_elevation_m', 'header_band_low_m',
+                           'ceiling_height_min_m', 'cable_level_2_m', 'cable_level_3_m',
+                           'cable_level_4_m'}),
+        values={}, clause='18.1-18.4',
+        note='The OCP Deschutes module specification governs rack, aisle and header-band geometry.'),
+    'rd113_r1': DesignProfile(
+        name='rd113_r1', label='Schneider RD113 R1', body='Schneider Electric EcoStruxure RD113',
+        document='',
+        # RD113 lists pipe diameters, clearances and elevations under project or
+        # OEM inputs. What it does publish is the rack it uses and the AI hot
+        # aisle, so those are all it governs here.
+        governs=frozenset({'rack_width_m', 'rack_depth_m', 'hot_aisle_width_m'}),
+        values={'rack_width_m': 0.600, 'rack_depth_m': 1.200, 'hot_aisle_width_m': 1.8288},
+        clause='RD113_4.2 R1 equipment list; RD113DS R0 p5',
+        note='RD113 publishes its rack and its AI hot aisle. It lists dimensions, clearances and pipe '
+             'sizes as project or OEM inputs, so nothing else here is governed by it.'),
+}
+
+
 # ----------------------------------------------------------- profile -------
 @dataclass
 class Profile:
@@ -220,6 +281,21 @@ class Profile:
     params: dict = field(default_factory=dict)
     categories: dict = field(default_factory=lambda: dict(CATEGORIES))
     deviations: list = field(default_factory=list)
+    design: 'DesignProfile' = PROFILES['project']
+
+    def for_design(self, design: DesignProfile) -> 'Profile':
+        """Restamp every parameter against the body that actually governs it."""
+        for key, param in list(self.params.items()):
+            if key in design.governs:
+                self.params[key] = replace(param, value=design.values.get(key, param.value),
+                    status='critical', source=design.body, clause=design.clause or param.clause,
+                    note=(param.note + f' [governed by {design.label}]').strip())
+            elif param.status == 'critical':
+                self.params[key] = replace(param, status='assumption',
+                    note=(param.note + f' [{param.source} marks this critical, but {design.label} does not '
+                          f'govern it here, so it is a project assumption]').strip())
+        self.design = design
+        return self
 
     @classmethod
     def default(cls) -> 'Profile':
@@ -289,6 +365,13 @@ class Profile:
 
     def manifest(self) -> dict:
         return {
+            'critical_deviations': self.critical_deviations(),
+            'design_profile': {'name': self.design.name, 'label': self.design.label,
+                               'body': self.design.body, 'document': self.design.document,
+                               'governs': sorted(self.design.governs), 'clause': self.design.clause,
+                               'note': self.design.note,
+                               'scope': 'Parameters outside `governs` are project assumptions under this '
+                                        'profile, whatever document they were sourced from.'},
             'parameters': {k: {'value': p.value, 'unit': p.unit, 'source': p.source,
                                'clause': p.clause, 'status': p.status, 'note': p.note}
                            for k, p in sorted(self.params.items())},

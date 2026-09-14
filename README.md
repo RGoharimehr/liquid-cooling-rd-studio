@@ -53,6 +53,7 @@ npm run build
 - [Sizing basis and formulas](liquid_cooling_generator/SIZING_BASIS.md)
 - [Headless finder architecture](rd-studio/HEADLESS_FINDER.md)
 - [Validation record and the independent acceptance harness](liquid_cooling_generator/VALIDATION.md)
+- [Adding a reference design](liquid_cooling_generator/references/PRESET_AUTHORING.md)
 
 This is a concept-layout generator with prescribed-flow pressure estimates. It does not solve hydraulic balance or certify a design. Air coils initially share FWS; warm CDU water may require a separate colder air-cooling loop. Vendor operating-point data remains subject to qualification.
 

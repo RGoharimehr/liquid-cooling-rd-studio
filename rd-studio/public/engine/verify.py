@@ -99,9 +99,10 @@ def verify_evidence(docs, meta):
     return results
 
 
-# The register is written against the OCP Deschutes module. Its fixed rack
-# pitch, row length and 2 MW / 500 GPM reference CDU are that module's numbers,
-# not universal requirements, so they can only fail a design that selected it.
+# A register entry can only fail a design governed by the document it cites. The
+# Deschutes rack pitch, row length and 2 MW / 500 GPM reference CDU are that
+# module's numbers, not universal requirements, so the gate reads the selected
+# design profile rather than naming one document.
 DESCHUTES = 'OCP-Specification-Deschutes_v1_0'
 # These checks fall back to a Deschutes reference figure only while the project
 # has not supplied its own limit. Once it has, the check is measuring against
@@ -112,6 +113,7 @@ PROJECT_LIMIT_CHECKS = {'tcs_loop_within_available_dp': 'cdu_available_head_kPa'
 def verify_model(graph, config, profile):
     results = []
     selected = getattr(config, 'standards_profile', 'project')
+    governing = getattr(getattr(profile, 'design', None), 'document', '') or None
     for d in REGISTER:
         if not d.check:
             continue
@@ -124,11 +126,11 @@ def verify_model(graph, config, profile):
             continue
         status = 'NOT_EVALUABLE' if ok is None else ('PASS' if ok else 'FAIL')
         supplied = getattr(config, PROJECT_LIMIT_CHECKS.get(d.check, ''), 0) or 0
-        if status == 'FAIL' and d.document == DESCHUTES and selected != 'deschutes_module' and not supplied:
+        if status == 'FAIL' and d.document and d.document != governing and not supplied:
             status = 'NOT_APPLICABLE'
-            detail = (str(detail) + f'. Measured against the Deschutes module reference, which does not '
-                      f'govern this design: standards_profile is {selected!r}. Select the Deschutes '
-                      f'profile to make this a requirement.')
+            detail = (str(detail) + f'. Measured against {d.document}, which does not govern this design: '
+                      f'the selected profile is {selected!r}. Choose a profile governed by that document '
+                      f'to make this a requirement.')
         results.append({'id': d.id, 'check': d.check, 'status': status, 'severity': d.severity,
                         'actual': actual, 'expected': expected, 'detail': detail,
                         'choice': d.choice})
