@@ -37,6 +37,7 @@ python3 -m pytest tests -q
 python3 validate_design.py --all-presets
 python3 validate_design.py --design-space    # what can vary, by studio section
 python3 validate_design.py --config presets/compact.json --matrix   # all 108 geometry variants
+python3 benchmark.py --all                   # against published reference designs
 cd ../rd-studio
 node scripts/test-agent.mjs
 node scripts/test-finder.mjs

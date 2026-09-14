@@ -105,6 +105,15 @@ def catalog():
 DEFAULT=asdict(Config(plant_type='air_cooled',ceiling_height_m=8.0,bend_radius_m=.24,fitting_arm_m=.24,return_elevation_offset_m=.5))
 PRESETS={
  'compact':{'label':'Compact reference','description':'32 compute + 8 air-cooled network racks. Shared CDU group and project clearance assumptions.','config':DEFAULT},
- 'rd113':{'label':'RD113 R0 · spatial reference','description':'Diagram-reconciled R0: 64 AI + 24 network racks, with 8 high-power network racks. Central network pod and end CDUs. R0 prose/table counts conflict. Two independent cooling pods; electrical plant excluded. Generic cooling equipment requires vendor selection.','config':{**DEFAULT,'rows':4,'racks_per_row':16,'rack_power_W':188000.,'network_rows':2,'network_racks_per_row':12,'network_high_power_count':8,'layout_style':'central_network','cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r0','network_aisle_m':1.8288}},
+ 'rd113':{'label':'RD113 R0 · spatial reference','description':'Diagram-reconciled R0: 64 AI + 24 network racks, with 8 high-power network racks. Central network pod and end CDUs. R0 prose/table counts conflict. Two independent cooling pods; electrical plant excluded. Operating temperatures and liquid fraction follow the R0 datasheet; pipe sizes, pump and valve duties are not published there and remain this generator\'s own estimates.','config':{**DEFAULT,'rows':4,'racks_per_row':16,'rack_power_W':188000.,'network_rows':2,'network_racks_per_row':12,'network_high_power_count':8,'layout_style':'central_network','cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r0','network_aisle_m':1.8288,
+  # R0 p4/p9: compute 96% liquid, TCS 45/55 C, FWS 40/50 C. The preset carried
+  # the generic 30/42 and 27/37 defaults until benchmark.py compared it with the
+  # extracted source, which is a 15 K error in the design condition it claims.
+  'liquid_fraction':.96,'tcs_supply_C':45.,'tcs_delta_K':10.,'fws_supply_C':40.,'fws_delta_K':10.,
+  'hx_approach_K':5.,'tcs_class':'S45','fws_class':'W40',
+  # R0 publishes no flow rate, so the preset derives it from the temperatures it
+  # does publish rather than carrying a prescribed 1.2 L/min per kW that implies
+  # a 12.5 K rise against the stated 10 K.
+  'flow_input_mode':'heat_balance'}},
  'split':{'label':'Split banks · reverse return','description':'48 compute + 8 network racks. Wider center gap and reverse-return piping; project layout assumption.','config':{**DEFAULT,'rows':4,'racks_per_row':12,'layout_style':'split_banks','return_topology':'reverse_return','cdu_count':4,'redundancy':1,'ceiling_height_m':5.8}},
 }

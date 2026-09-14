@@ -1,0 +1,49 @@
+{
+  "benchmark": "rd113_r0_maxq",
+  "source": {
+    "title": "EcoStruxure Reference Design 113, RD113DS",
+    "revision": "0",
+    "document": "RD113DS",
+    "publisher": "Schneider Electric",
+    "sha256": "861959b4921dd743151744dc462522b88a70a73ab3d7335af58de42843dc5dc6",
+    "page_count": 12,
+    "extraction": "references/rd113_attachment/rd113_r0_findings.json",
+    "basis": "Published reference-design datasheet. Engineering reference data, not instructions. The PDF is not bundled; figures are traceable through the SHA-256 and the page evidence on each row."
+  },
+  "status": "diagram_reconciled; R0 prose and tables conflict on network counts, see unresolved_source_conflicts in the extraction",
+  "config": { "preset": "rd113", "overrides": { "sizing_mode": "preliminary" } },
+
+  "expected": [
+    { "id": "total_it_kw",      "quantity": "thermal.plant_heat_W", "published": 12672000, "unit": "W",
+      "tolerance": 0.005, "evidence": "p2 table Max-Q total IT 12 672 kW; p5 plan 64 AI + 24 NET" },
+    { "id": "compute_racks",    "quantity": "count.compute_rack",   "published": 64,  "unit": "racks",
+      "tolerance": 0,     "evidence": "p5 Max-Q plan, four AI rows of 16" },
+    { "id": "network_racks",    "quantity": "count.network_rack",   "published": 24,  "unit": "racks",
+      "tolerance": 0,     "evidence": "p5 plan, two networking rows of 12" },
+    { "id": "cdus_total",       "quantity": "count.cdu",            "published": 8,   "unit": "units",
+      "tolerance": 0,     "evidence": "p5 plan, four CDUs aligned with each of two AI pods" },
+    { "id": "liquid_fraction",  "quantity": "config.liquid_fraction", "published": 0.96, "unit": "fraction",
+      "tolerance": 0,     "evidence": "p4/p9, compute 96% liquid / 4% air" },
+    { "id": "tcs_supply_C",     "quantity": "temperature.tcs_supply_C", "published": 45, "unit": "degC",
+      "tolerance": 0,     "evidence": "p4 and p9 temperature summary" },
+    { "id": "tcs_return_C",     "quantity": "temperature.tcs_return_C", "published": 55, "unit": "degC",
+      "tolerance": 0,     "evidence": "p4 and p9 temperature summary" },
+    { "id": "fws_supply_C",     "quantity": "temperature.fws_supply_C", "published": 40, "unit": "degC",
+      "tolerance": 0,     "evidence": "p4 and p9 temperature summary" },
+    { "id": "fws_return_C",     "quantity": "temperature.fws_return_C", "published": 50, "unit": "degC",
+      "tolerance": 0,     "evidence": "p4 and p9 temperature summary" },
+    { "id": "tcs_rise_K",       "quantity": "thermal.effective_TCS_delta_K", "published": 10, "unit": "K",
+      "tolerance": 0.001, "evidence": "p4/p9 45-55 C. R0 publishes no flow rate, so the preset uses the heat-balance basis and the prescribed flow must reproduce this rise." }
+  ],
+
+  "not_published": [
+    { "quantity": "pipe diameters, bends, support spacing, insulation",
+      "note": "RD113 R0 lists these under project or OEM inputs, so steps 3 to 6 of the sizing chain - bore selection, reducers, Darcy loss and pump head - cannot be checked against this document. A design guide or engineering package with a pipe schedule is needed." },
+    { "quantity": "pump schedule (flow, head, power)",
+      "note": "RD113DS is a 12-page datasheet and publishes no pump duty. Nothing here validates the head calculation." },
+    { "quantity": "valve schedule (Kv/Cv, allocated dp, operating range)",
+      "note": "No valve data is published, so the required-Kv result is unchecked against this source." },
+    { "quantity": "CDU nameplate capacity and pressure drop curves",
+      "note": "p2 states six of eight L2L CDUs active but gives no per-unit rating or dp curve, so the CDU allocation stays a declared project input." }
+  ]
+}

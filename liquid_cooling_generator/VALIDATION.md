@@ -129,3 +129,68 @@ number — `layout_style`, `return_topology`, `cdu_placement`, `plant_type` and
 builds and checks all of them. The remaining axes move numbers the checks
 already re-derive from first principles, so a passing matrix plus the
 first-principles checks covers the space without enumerating it.
+
+## Benchmarking against a published reference design
+
+`validate_design.py` proves the engine is internally coherent: every number
+follows from its own inputs by the relations in `SIZING_BASIS.md`. It cannot
+tell you whether those inputs are the right ones, or whether the result
+resembles what a vendor actually builds. Only a published design can.
+
+`benchmark.py` compares a generated design against one. A fixture in
+`references/benchmarks/` holds the source document's provenance including its
+SHA-256, the configuration that represents it here, the values the document
+publishes with a unit, a tolerance and the page each came from, and - just as
+important - a `not_published` list naming what the document does **not** state,
+so an unchecked quantity is visible rather than silently absent.
+
+```sh
+python3 benchmark.py --all
+python3 benchmark.py --fixture references/benchmarks/rd113_r0_maxq.json --verbose
+```
+
+A difference is a finding to adjudicate, not a verdict: the model may be wrong,
+the fixture may misread the source, or the two may be making different declared
+assumptions. The runner reports the delta and the page evidence and leaves the
+judgement to a person. Exit status is 1 if any published value is outside its
+tolerance.
+
+### What the first benchmark found
+
+The seeded `rd113_r0_maxq` fixture compares the shipped RD113 preset against the
+figures already extracted into `references/rd113_attachment/`. Five of its nine
+published values did not match, in the preset rather than in the engine:
+
+| Quantity | RD113 R0 | Preset carried | Now |
+| --- | --- | --- | --- |
+| Compute liquid fraction | 0.96 | 0.95 | 0.96 |
+| TCS supply / return | 45 / 55 °C | 30 / 42 °C | 45 / 55 °C |
+| FWS supply / return | 40 / 50 °C | 27 / 37 °C | 40 / 50 °C |
+
+The preset was labelled an RD113 R0 reference while carrying the generic default
+design condition - a 15 K error in the temperatures it claims to represent.
+Counts and total IT power were already correct. `hx_approach_K` follows at 5 K
+(45 − 40), and the classes become S45 / W40.
+
+R0 publishes no flow rate, so the preset now uses the heat-balance basis and
+derives flow from the temperatures it does publish. It previously carried a
+prescribed 1.2 L/min per kW, which at the entered fluid properties implies a
+12.5 K rise against the stated 10 K - the inconsistency `SIZING_BASIS.md` §1
+says to report rather than silently combine, and which the harness reported as a
+warning the moment the correct temperatures went in.
+
+### What a datasheet cannot check
+
+RD113DS is a twelve-page datasheet. It lists pipe diameters, bends, support
+spacing and insulation under project or OEM inputs, and publishes no pump or
+valve schedule. So it validates the **thermal and flow** half of the chain -
+heat ledger, temperatures, counts, derived flow - and nothing downstream of it.
+Bore selection, reducers, Darcy loss, pump head and required Kv remain checked
+only for internal consistency by `validate_design.py`.
+
+Closing that half needs a source that publishes the numbers: a design guide or
+engineering package with a pipe schedule, a pump schedule with duty points, a
+valve schedule with Kv at a stated pressure drop, or a CDU datasheet with a
+flow-versus-pressure-drop curve. Each of those becomes another fixture, and each
+`not_published` entry that disappears is a real increase in coverage.
+

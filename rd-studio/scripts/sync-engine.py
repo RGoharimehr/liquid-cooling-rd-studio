@@ -8,7 +8,7 @@ from pipeline import build
 from verify import run as verify_run
 from model import Config
 names=[]
-SKIP={'run.py','validate_design.py'}   # CLI entry points; the browser never imports them
+SKIP={'run.py','validate_design.py','benchmark.py'}   # CLI entry points; the browser never imports them
 for p in engine.glob('*.py'):
     if p.name in SKIP:continue
     target=public/'engine'/p.name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(p.name)
