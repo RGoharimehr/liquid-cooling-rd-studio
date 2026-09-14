@@ -176,12 +176,15 @@ def collect(graph, config=None):
         population = kinds.get(kind, set())
         if len(population) > 1 and found >= population:
             blanket.add((code, kind))
-            sample = flags[next(iter(found))]
-            detail = next(x['detail'] for x in sample if x['code'] == code)
-            category = next(x['category'] for x in sample if x['code'] == code)
-            severity = next(x['severity'] for x in sample if x['code'] == code)
+            # Take the representative in sorted order. Iterating the set directly
+            # picked an arbitrary component, and because a detail string can carry
+            # that component's own numbers the same design serialised differently
+            # from run to run.
+            sample = flags[min(found)]
+            detail, category, severity = next((x['detail'], x['category'], x['severity'])
+                                              for x in sample if x['code'] == code)
             systemic.append({'code': code, 'category': category, 'severity': severity,
-                'scope': f'every {kind}', 'components': len(found),
+                'scope': f'every {kind}', 'components': len(found), 'representative': min(found),
                 'component_ids': sorted(found), 'detail': detail,
                 'clears_when': 'One project input or vendor datum resolves all of them.'})
     for cid in list(flags):

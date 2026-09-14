@@ -28,6 +28,9 @@ python3 run.py --config presets/compact.json --out outputs/my-design
 
 ## Validate changes
 
+Every command below runs on each push and pull request via
+[`.github/workflows/checks.yml`](.github/workflows/checks.yml).
+
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
