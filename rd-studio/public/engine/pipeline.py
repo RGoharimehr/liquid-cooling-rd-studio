@@ -113,6 +113,8 @@ def build(config):
     except ImportError:pass
     from equipment_requirements import build_requirements
     g['metadata']['equipment_requirements'] = build_requirements(g, config)
+    from attention import collect
+    g['metadata']['attention'] = collect(g, config)
     return g,profile
 
 

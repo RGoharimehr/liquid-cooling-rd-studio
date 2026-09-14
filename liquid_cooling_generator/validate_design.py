@@ -519,6 +519,30 @@ def check_geometry(graph, report):
                round(total, 3), '!= pipe count')
 
 
+def check_attention(graph, report):
+    """A flag on everything is a flag on nothing."""
+    data = graph['metadata'].get('attention')
+    if not data:
+        return
+    total = sum(1 for c in graph['components'] if not c.get('attachment'))
+    flagged = data['summary']['flagged_components']
+    report.add('attention', 'component flags stay specific rather than blanketing the model',
+               flagged <= max(10, total * .05), f'{flagged} of {total} physical components',
+               'at most 5% or 10 components',
+               'a finding that lands on every component of a kind belongs in the systemic list, '
+               'where one project input clears it, not on each object in the 3D view')
+    ids = {c['id'] for c in graph['components']}
+    unknown = [cid for cid in data['components'] if cid not in ids]
+    unknown += [cid for item in data.get('systemic', []) for cid in item.get('component_ids', []) if cid not in ids]
+    report.add('attention', 'every flag names a component that exists',
+               not unknown, unknown[:3], [], 'the viewer cannot colour an object that is not in the model')
+    categories = set(data['categories'])
+    stray = {f['category'] for entry in data['components'].values() for f in entry['flags']} - categories
+    stray |= {item['category'] for item in data.get('systemic', [])} - categories
+    report.add('attention', 'every flag uses a declared category',
+               not stray, sorted(stray), sorted(categories))
+
+
 def check_artifact_agreement(graph, report):
     """Two blocks in one file must not answer the same question differently."""
     sizing = graph['metadata'].get('preliminary_sizing') or {}
@@ -663,6 +687,7 @@ def validate(graph, report, config_dict=None, build=None, do_sweep=False):
     check_catalogue(graph, report)
     check_geometry(graph, report)
     check_artifact_agreement(graph, report)
+    check_attention(graph, report)
     check_redundancy(graph, report)
     if do_sweep and config_dict and build:
         sweep(config_dict, report, build)

@@ -90,17 +90,8 @@ class Config:
     fws_supply_C: float = 27.0
     hx_approach_K: float = 3.0
     fws_delta_K: float = 10.0
-    velocity_cap_m_s: float = 2.7
     standards_profile: str = 'project'
     standards_overrides: dict = field(default_factory=dict)
-    pump_margin_fraction: float = .2
-    initial_pipe_length_m: float = 1.0
-    rack_load_dp_Pa: float = 50000.0
-    manifold_dp_Pa: float = 5000.0
-    qd_dp_Pa: float = 10000.0
-    cdu_secondary_dp_Pa: float = 60000.0
-    cdu_primary_dp_Pa: float = 50000.0
-    strainer_dp_Pa: float = 15000.0
 
     cdu_width_m: float = 2.4
     cdu_depth_m: float = 1.0
@@ -202,6 +193,22 @@ class Config:
     fws_design_pressure_bar: float = 0.0
     cws_design_pressure_bar: float = 0.0
 
+    # Settings that no longer exist, and why. Six of them were a second set of
+    # equipment pressure allocations in Pa that shadowed the live *_design_dp_kPa
+    # inputs with different values; they were written onto each edge as
+    # reference_dp_Pa and immediately zeroed again, so nothing ever read them.
+    RETIRED = {
+        'pump_margin_fraction': 'superseded by pump_head_margin_fraction',
+        'velocity_cap_m_s': 'superseded by the per-category tcs_header / tcs_branch / fws velocity caps',
+        'initial_pipe_length_m': 'a placeholder length that routing overwrites on every pipe',
+        'rack_load_dp_Pa': 'superseded by rack_design_dp_kPa',
+        'manifold_dp_Pa': 'the rack_manifold component it priced no longer exists',
+        'qd_dp_Pa': 'quick disconnects are priced by their loss coefficient, not an allocation',
+        'strainer_dp_Pa': 'strainers are priced by their loss coefficient, not an allocation',
+        'cdu_secondary_dp_Pa': 'the CDU secondary side is the pump for its circuit and carries no loss',
+        'cdu_primary_dp_Pa': 'superseded by cdu_design_dp_kPa',
+    }
+
     @classmethod
     def from_dict(cls, data):
         if not isinstance(data, dict): raise ValueError('Expected a parameter object')
@@ -212,6 +219,12 @@ class Config:
         # The retired heat-balance mode produced a design with no pressure,
         # pump or valve results at all. Migrate it rather than rebuilding one.
         if values.get('sizing_mode') == 'heat_balance': values['sizing_mode'] = 'preliminary'
+        if values.get('standards_profile') == 'rd113_r0': values['standards_profile'] = 'rd113_r1'
+        # Drop retired settings rather than refusing a file that still carries
+        # them. They influenced nothing, so silently ignoring them changes no
+        # result; raising would only break saved configurations.
+        for key in set(values) & set(cls.RETIRED):
+            values.pop(key)
         return cls(schema_version=2, **values)
 
     def validate(self):
@@ -273,7 +286,7 @@ class Config:
         if self.cdu_placement not in ('end_gallery','central_gallery','custom'): raise ValueError('Unknown CDU placement')
         if self.sizing_mode == 'heat_balance': raise ValueError("The heat_balance sizing mode is retired because it produced no pressure, pump or valve results; use 'preliminary' (Config.from_dict migrates it automatically)")
         if self.sizing_mode not in ('manual','preliminary'): raise ValueError('Select manual or preliminary sizing')
-        if self.standards_profile not in ('project','deschutes_module','rd113_r0'): raise ValueError('Unknown standards profile')
+        if self.standards_profile not in ('project','deschutes_module','rd113_r1'): raise ValueError('Unknown standards profile')
         if self.pod_elevation_spacing_m<=0:raise ValueError('Pod elevation spacing must be positive')
         if self.flow_input_mode not in ('lpm_per_kw','heat_balance'):raise ValueError('Unknown flow input basis')
         for key in ('flow_lpm_per_kw','chiller_cop','tcs_density_kg_m3','tcs_specific_heat_J_kgK','tcs_viscosity_Pa_s','fws_density_kg_m3','fws_specific_heat_J_kgK','fws_viscosity_Pa_s','cws_density_kg_m3','cws_specific_heat_J_kgK','cws_viscosity_Pa_s'):

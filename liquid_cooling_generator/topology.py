@@ -59,16 +59,17 @@ class Builder:
         nominalflow={'rack':self.h['rack_m3_s'],'row_branch':self.h['rack_m3_s'],
             'row':self.h['row_m3_s'],'main':self.h['tcs_total_m3_s'] if service=='TCS' else self.h['fws_total_m3_s'],
             'cdu':self.h['cdu_secondary_m3_s'] if service=='TCS' else self.h['cdu_primary_m3_s']}[level]
-        refdp={'rack_load':self.c.rack_load_dp_Pa,'rack_manifold':self.c.manifold_dp_Pa,
-            'quick_disconnect':self.c.qd_dp_Pa,'cdu_secondary':self.c.cdu_secondary_dp_Pa,
-            'cdu_primary':self.c.cdu_primary_dp_Pa,'strainer':self.c.strainer_dp_Pa}.get(kind,0.)
+        # Equipment pressure allocations belong to preliminary_sizing, which owns
+        # the *_design_dp_kPa inputs. This edge field stays zero so a component's
+        # declared loss can only come from one place.
+        refdp=0.
         e=asdict(Edge(f'H{len(self.g["edges"])+1:05d}',comp['id'],a,b,service,level,kind,
-            nominalflow,nominalflow,basis,self.c.initial_pipe_length_m if kind=='pipe' else 0.,
+            nominalflow,nominalflow,basis,0.,
             material,K.get(kind,0.),refdp,nominalflow,comp['row'],comp['rack'],comp['cdu'],
             {'flow':'calculated from heat balance; assumed controlled parallel flow split',
              'K':'EPANET 2.2 Table 3.3 representative value' if kind in ('elbow','tee_run','tee_branch','isolation_valve','check_valve') else 'ASSUMPTION where nonzero; vendor Cv/K missing',
              'reference_dp':'ASSUMPTION where nonzero; vendor curves missing',
-             'length':'ASSUMPTION initial 1 m per pipe; replaced in routing stage',
+             'length':'zero until route_graph sets the routed centre-line length',
              'material':'assigned by pipe category, not by hard-coded level test'}))
         e['sizing_flow_m3_s']=nominalflow
         e['pipe_category']=cat.name

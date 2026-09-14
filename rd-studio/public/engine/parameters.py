@@ -6,8 +6,8 @@ OCP='https://www.opencompute.org/documents/ocp-acf-reference-design-guidance-whi
 MANIFOLD='https://www.opencompute.org/documents/ocp-white-paper-rack-manifold-requirements-and-qualification-v3-pdf'
 TCS='https://www.opencompute.org/documents/ocp-modular-tcs-rev-1-final-2025-pdf'
 RD='https://www.se.com/sg/en/download/document/RD113DS/'
-EXCLUDED={'standards_overrides','velocity_cap_m_s','initial_pipe_length_m','pump_margin_fraction','rack_load_dp_Pa','manifold_dp_Pa','qd_dp_Pa','cdu_secondary_dp_Pa','cdu_primary_dp_Pa','strainer_dp_Pa','hx_approach_K','schema_version'}
-OPTIONS={'layout_style':['side_gallery','central_network','split_banks'],'return_topology':['direct_return','reverse_return'],'cdu_placement':['end_gallery','central_gallery','custom'],'sizing_mode':['manual','preliminary'],'flow_input_mode':['lpm_per_kw','heat_balance'],'standards_profile':['project','deschutes_module','rd113_r0'],'plant_type':['boundary','air_cooled','water_cooled'],'tcs_class':['S20','S25','S30','S35','S40','S45','S50'],'fws_class':['W17','W27','W32','W40','W45','W+']}
+EXCLUDED={'standards_overrides','hx_approach_K','schema_version'}
+OPTIONS={'layout_style':['side_gallery','central_network','split_banks'],'return_topology':['direct_return','reverse_return'],'cdu_placement':['end_gallery','central_gallery','custom'],'sizing_mode':['manual','preliminary'],'flow_input_mode':['lpm_per_kw','heat_balance'],'standards_profile':['project','deschutes_module','rd113_r1'],'plant_type':['boundary','air_cooled','water_cooled'],'tcs_class':['S20','S25','S30','S35','S40','S45','S50'],'fws_class':['W17','W27','W32','W40','W45','W+']}
 RANGES={'rows':(1,16,1),'racks_per_row':(1,40,1),'network_rows':(0,8,1),'network_racks_per_row':(0,40,1),'network_high_power_count':(0,320,1),'cdu_count':(1,8,1),'redundancy':(0,7,1),'liquid_fraction':(.01,1,.01),'pg_volume_fraction':(0,.6,.01),'fitting_arm_m':(.04,.24,.01),'bend_radius_m':(.04,.35,.01),'rack_power_W':(1,1000000,1000),'network_rack_power_W':(0,1000000,1000),'network_high_power_W':(0,1000000,1000),'aisle_width_m':(.6,10,.05),'first_rack_x_m':(1,50,.1),'cdu_pitch_m':(1,20,.1)}
 LABELS={'rows':'Compute rows','racks_per_row':'Compute racks per row','layout_style':'Layout arrangement','return_topology':'Return-pipe topology','cdu_placement':'CDU placement','rack_power_W':'Compute rack power','network_high_power_count':'High-power network racks','network_high_power_W':'High-power rack rating','standards_profile':'Reference comparison','pg_volume_fraction':'PG volume fraction'}
 
@@ -117,7 +117,7 @@ PRESETS={
  'rd113':{'label':'RD113 R1 · equipment-list reference','description':'64 AI racks at the Max-Q 188 kW rack power, 32 networking racks totalling 880 kW, 8 Motivair MCDU-70 CDUs in two pods, 4 Uniflair fan walls. Counts, equipment and operating temperatures follow the supplied RD113 R1 documents; see references/rd113_r1. Pipe sizes, pump duties and valve coefficients are not published in that set and remain this generator\'s own estimates.','config':{**DEFAULT,'rows':4,'racks_per_row':16,'rack_power_W':188000.,'layout_style':'central_network',
   # The generic default bores belong to a 4 MW hall. Left on manual this preset
   # ships pipes far too small for its own load, so it selects its own sizes.
-  'sizing_mode':'preliminary','cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r0','network_aisle_m':1.8288,
+  'sizing_mode':'preliminary','cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r1','network_aisle_m':1.8288,
   # RD113_2.5 R1: 8 SMN + 8 N/S at 15 kW, 8 CME at 35 kW, 8 CIN at 45 kW = 32
   # racks, 880 kW. The generator supports one base power plus one high-power
   # band, so the 16 high racks carry their exact 40 kW average (8x35 + 8x45).

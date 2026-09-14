@@ -382,3 +382,96 @@ different designs — different temperatures, a different flow basis, a differen
 FWS class. The files are regenerated from `parameters.PRESETS` and a test now
 fails if they drift again.
 
+## Component and settings audit
+
+### Every component kind, and what it is
+
+Auditing the roles mechanically — is each component a source or a resistance,
+does it carry a declared loss, is it on a pump path, does it have a duty — is
+what found the CDU error above. Re-run over every kind, the model is now
+coherent, with three deliberate zeros worth knowing about:
+
+| Kind | Loss basis | Why |
+| --- | --- | --- |
+| `pump`, `cdu_secondary` | none | sources: they drive their circuit, and a source is not charged for itself |
+| `cooling_tower` | none | its nozzle requirement is carried once, in the open-circuit static term |
+| `flex_connector` | K = 0, declared | an explicit placeholder; hose and quick-disconnect curves are vendor data |
+| `pipe` | length × friction | not a fitting; its loss is Darcy–Weisbach, not a coefficient |
+| `cdu_primary`, `chiller_*`, `rack_load`, `air_coil`, valves | declared allocation | resistances the circuit pump pushes through |
+| everything else with an edge | loss coefficient | elbow, tee run and branch, reducer, isolation and check valve, strainer, air separator, QD |
+
+### Nine settings retired
+
+181 config keys, and a mechanical check of which the engine actually reads found
+nine that it does not:
+
+| Retired | Why |
+| --- | --- |
+| `pump_margin_fraction` | zero references anywhere; `pump_head_margin_fraction` is the live one, with a different default |
+| `velocity_cap_m_s` | superseded by the three per-category caps |
+| `initial_pipe_length_m` | a placeholder length routing overwrites on every pipe |
+| `rack_load_dp_Pa`, `manifold_dp_Pa`, `qd_dp_Pa`, `strainer_dp_Pa`, `cdu_primary_dp_Pa`, `cdu_secondary_dp_Pa` | a second set of equipment pressure allocations, in Pa, shadowing the live `*_design_dp_kPa` inputs with different values |
+
+The six `*_dp_Pa` settings are the interesting ones: they were written onto each
+edge as `reference_dp_Pa` and then zeroed by `apply_sizes` before anything read
+them. They disagreed with the live set that governs — `rack_load_dp_Pa` 50 kPa
+against `rack_design_dp_kPa` 30 kPa, `cdu_secondary_dp_Pa` 60 kPa against
+`cdu_design_dp_kPa` 50 kPa — and `manifold_dp_Pa` priced a `rack_manifold`
+component that no longer exists. `Config.from_dict` drops all nine from an older
+file rather than refusing it; they influenced nothing, so no result changes.
+
+## Highlighting what needs attention, in the model
+
+`metadata.attention` rolls every finding up against the component it concerns,
+so the 3D view can colour the object instead of a reader hunting through JSON.
+It computes nothing new: a flag here must already exist as a finding elsewhere.
+
+    missing_information   a required input or vendor datum is unassigned
+    undersized            the requirement exceeds what has been selected
+    oversized             a smaller listed size would still meet the criterion
+    clash                 geometry overlaps something it must not
+    unserved              a load loses its path, or its duty cannot be allocated
+
+The first attempt flagged **539 of 1900 components**, which is a flag on nothing.
+Almost all of it was one missing project input — no design pressure entered —
+landing on every valve, hose and quick disconnect independently.
+
+So a finding that lands on *every* component of a kind, or on a whole pipe
+family, is now one **systemic** entry carrying its scope, its count, the
+component ids it covers and what would clear it. That takes the three shipped
+presets to **2 specific flags and 15–18 systemic findings** each. The viewer
+shows specific flags by default with systemic ones behind a toggle, and
+`validate_design.py` fails any design that flags more than 5 % of its
+components, so the roll-up cannot quietly go back to blanketing the model.
+
+Oversizing is only reported where a bore was chosen by hand and a smaller listed
+size would still meet the velocity cap — the catalogue recommendation is the
+smallest that fits by construction, so it can never be oversized by that test.
+
+## The three design philosophies are not actually three
+
+The repository cites OCP Deschutes, ASHRAE TC 9.9 / CloudScale Modular TCS, and
+Schneider RD113, and offers a `standards_profile` selector with three values. In
+practice there is **one merged parameter set**:
+
+| | Count |
+| --- | --- |
+| `standards.py` parameters sourced from OCP Deschutes | 23 of 40 |
+| from ASHRAE TC 9.9 chapters | 7 |
+| from CloudScale Modular TCS | 3 |
+| from ASCE 7 / ASME B31.1 practice | 5 |
+| decision register entries citing Deschutes | 31 of 48 |
+
+`build_profile` does not branch on `standards_profile` at all, and neither does
+`guidance`. The only code that reads it is the acceptance gate added earlier,
+which decides whether Deschutes-specific checks are reported. So selecting the
+RD113 profile still gives a design Deschutes rack pitch, Deschutes manifold
+elevation and the Deschutes header band — **a Schneider preset inheriting 23
+OCP-sourced parameters**.
+
+That is a real structural gap, not a cosmetic one, and it is the thing to fix
+before adding more Schneider sub-designs. A preset should declare which body
+governs each class of parameter, and `standards_profile` should either select a
+parameter set or be removed as a false affordance. The profile value is at least
+no longer stale: `rd113_r0` is now `rd113_r1`, with the old value migrated.
+
