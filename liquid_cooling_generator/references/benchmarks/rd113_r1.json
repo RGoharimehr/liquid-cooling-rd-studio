@@ -1,0 +1,85 @@
+{
+  "benchmark": "rd113_r1",
+  "source": {
+    "title": "EcoStruxure Reference Design 113 — supplied document set",
+    "revision": "1 (3.3 equipment list is R0)",
+    "publisher": "Schneider Electric",
+    "sha256": "5b3e5885e95e13b8482e286aee1dd106542173282a7b221164033b1a951aa3e7",
+    "extraction": "references/rd113_r1/rd113_r1_findings.json",
+    "documents": ["RD113_3.2 R1 mechanical piping diagram", "RD113_3.3 R0 facility cooling equipment list",
+                  "RD113_4.2 R1 IT space equipment list", "RD113_2.5 R1 EDP impacts", "RD113TOC R1"],
+    "basis": "Published reference-design documents supplied by the user. The PDFs are not bundled; every figure is traceable through the SHA-256 in the extraction and the document and page recorded on each row."
+  },
+  "status": "R1 supersedes the R0 datasheet. Design temperatures are not restated in this set and are carried from R0.",
+  "config": { "preset": "rd113", "overrides": { "sizing_mode": "preliminary" } },
+
+  "expected": [
+    { "id": "ai_racks",        "quantity": "count.compute_rack", "published": 64, "unit": "racks", "tolerance": 0,
+      "evidence": "4.2 R1, NetShelter MGX v1.2 x64 installed" },
+    { "id": "network_racks",   "quantity": "count.network_rack", "published": 32, "unit": "racks", "tolerance": 0,
+      "evidence": "4.2 R1, NetShelter MGX v1.1 x32; 2.5 R1 gives 8 SMN + 8 N/S + 8 CME + 8 CIN" },
+    { "id": "network_kW",      "quantity": "config.network_high_power_W", "published": 40000, "unit": "W", "tolerance": 0,
+      "evidence": "2.5 R1: the 16 high racks are 8 CME at 35 kW and 8 CIN at 45 kW, an exact 40 kW average. Total networking load is 880 kW." },
+    { "id": "cdus",            "quantity": "count.cdu", "published": 8, "unit": "units", "tolerance": 0,
+      "evidence": "4.2 R1 Motivair MCDU-70 x8; 3.2 R1 shows CDU 1.1-1.4 and 2.1-2.4" },
+    { "id": "fan_walls",       "quantity": "count.air_unit", "published": 4, "unit": "units", "tolerance": 0,
+      "evidence": "4.2 R1 Uniflair FWCV40L2A x4; 3.2 R1 shows FW 1-4 each with one balancing valve" },
+    { "id": "chillers",        "quantity": "count.chiller", "published": 2, "unit": "units", "tolerance": 0,
+      "evidence": "3.3 Uniflair XCAF2524G x2, 2223 kW Dallas, N+1 feeding the fan walls" },
+    { "id": "pumps",           "quantity": "count.pump", "published": 6, "unit": "units", "tolerance": 0,
+      "evidence": "3.2 R1 shows CWP1-CWP6 in two banks of three; 3.3 gives a range of 5-8 to be sized upon design implementation",
+      "adjudication": "GENERATOR LIMITATION, not a design difference. plant.pumps lays a bank out along +Y from the plant origin, so from the third unit it crosses the chiller supply and return collectors at py+4 and py+6 at the same elevation. The generator's own clearance check correctly rejects that layout, so the preset carries two per bank. The parameter advertises 1-8 and only 1-2 place legally; the bank needs its own corridor or a reversed growth direction with matching junction axes." },
+    { "id": "liquid_fraction", "quantity": "config.liquid_fraction", "published": 0.96, "unit": "fraction", "tolerance": 0,
+      "evidence": "RD113DS R0 p4/p9, compute 96% liquid / 4% air; not restated in the R1 set" },
+    { "id": "tcs_supply_C",    "quantity": "temperature.tcs_supply_C", "published": 45, "unit": "degC", "tolerance": 0,
+      "evidence": "RD113DS R0 p4/p9; not restated in the R1 set" },
+    { "id": "tcs_return_C",    "quantity": "temperature.tcs_return_C", "published": 55, "unit": "degC", "tolerance": 0,
+      "evidence": "RD113DS R0 p4/p9" },
+    { "id": "fws_supply_C",    "quantity": "temperature.fws_supply_C", "published": 40, "unit": "degC", "tolerance": 0,
+      "evidence": "RD113DS R0 p4/p9" },
+    { "id": "fws_return_C",    "quantity": "temperature.fws_return_C", "published": 50, "unit": "degC", "tolerance": 0,
+      "evidence": "RD113DS R0 p4/p9" },
+    { "id": "tcs_rise_K",      "quantity": "thermal.effective_TCS_delta_K", "published": 10, "unit": "K", "tolerance": 0.001,
+      "evidence": "45-55 C. No flow rate is published anywhere in the set, so the preset uses the heat-balance basis and the prescribed flow must reproduce this rise." },
+
+    { "id": "cdu_capacity_kW", "quantity": "duty.CDU-01.heat_kW", "published": 2500, "unit": "kW", "tolerance": 0.02,
+      "evidence": "4.2 R1, Motivair MCDU-70 nameplate 2.5 MW at 4 degC approach. 3.2 R1 basis note: CDU flow rate is sized on all TCS racks at Max-P (227 kW).",
+      "adjudication": "Different redundancy allocation, not a calculation error. RD113 sizes on six of eight CDUs active across the whole TCS loop: 64 racks at 227 kW x 0.96 plus the 8 liquid CIN racks is about 14.3 MW over 6 units = 2.38 MW, inside the 2.5 MW nameplate. This generator treats the two pods as independent and takes the worst case where both requested outages fall in the same pod, leaving 2 of 4 units to carry that pod: 2.89 MW. The generator's figure is the stricter one. Resolve by confirming whether RD113 permits load transfer between pods, or whether the outage requirement is per pod rather than global." },
+
+    { "id": "chiller_duty_kW", "quantity": "duty.CHILLER-01.heat_kW", "published": 2223, "unit": "kW", "tolerance": 0.05,
+      "evidence": "3.3, Uniflair XCAF2524G 2223 kW Dallas, 2 units N+1, serving the fan walls only",
+      "adjudication": "The generator routes the whole plant load through one chiller bank. RD113 splits it: air-cooled chillers serve the fan walls, adiabatic fluid coolers serve the L2L CDUs. That two-plant architecture is not representable in the current plant model, so the chiller duty here is the full plant load rather than the fan-wall load alone." }
+  ],
+
+  "not_published": [
+    { "quantity": "pipe schedule",
+      "note": "No diameters, materials, insulation or support spacing anywhere in the supplied set. Only DN150 appears, on the pressurisation and expansion connections. Steps 3 to 6 of the sizing chain stay unchecked against RD113." },
+    { "quantity": "pump schedule",
+      "note": "3.3 states CWP are 'to be sized upon design implementation'. No duty point, so nothing here validates the head calculation." },
+    { "quantity": "valve schedule",
+      "note": "3.2 gives tags and topology but no Kv, Cv, allocated pressure drop or operating range for any ISV, PCV or BAV. The required-Kv result stays unchecked." },
+    { "quantity": "CDU pressure drop and flow",
+      "note": "No primary or secondary flow rate and no dp curve for the MCDU-70, so cdu_design_dp_kPa remains a declared project input." },
+    { "quantity": "physical layout",
+      "note": "RD113_3.2 states it depicts system connections and is NOT representative of physical layout. The layout drawing is RD113_1.1X, which was not supplied, so routed lengths and clearances stay unchecked." }
+  ],
+
+  "topology_differences": [
+    { "item": "per-rack valve",
+      "rd113": "PCV01-PCV64, one pod control valve per AI rack, flanked by isolation valves on the branch",
+      "generator": "one balancing valve on each rack return, plus isolation valves",
+      "effect": "A control valve modulates and needs an operating range, authority and rangeability; a balancing valve is set once. The generator computes a single required Kv at one design point either way, so it cannot size the RD113 device correctly." },
+    { "item": "expansion and air separation",
+      "rd113": "ET-1 to ET-4 and DAS-1, DAS-2 - one pair per circuit",
+      "generator": "one expansion tank and one air separator on the FWS pump suction",
+      "effect": "The generator models a single facility circuit; RD113 runs two." },
+    { "item": "heat rejection",
+      "rd113": "air-cooled chillers for the fan walls, adiabatic fluid coolers for the L2L CDUs",
+      "generator": "one plant serving the whole load",
+      "effect": "Two independent rejection plants are not representable; see the chiller_duty_kW adjudication." },
+    { "item": "liquid-cooled networking",
+      "rd113": "8 CIN racks at 45 kW are liquid-cooled",
+      "generator": "network racks are air-cooled only",
+      "effect": "360 kW sits on the air side in the model and on the TCS side in RD113." }
+  ]
+}

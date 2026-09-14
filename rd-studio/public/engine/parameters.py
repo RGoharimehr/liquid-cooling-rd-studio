@@ -105,7 +105,21 @@ def catalog():
 DEFAULT=asdict(Config(plant_type='air_cooled',ceiling_height_m=8.0,bend_radius_m=.24,fitting_arm_m=.24,return_elevation_offset_m=.5))
 PRESETS={
  'compact':{'label':'Compact reference','description':'32 compute + 8 air-cooled network racks. Shared CDU group and project clearance assumptions.','config':DEFAULT},
- 'rd113':{'label':'RD113 R0 · spatial reference','description':'Diagram-reconciled R0: 64 AI + 24 network racks, with 8 high-power network racks. Central network pod and end CDUs. R0 prose/table counts conflict. Two independent cooling pods; electrical plant excluded. Operating temperatures and liquid fraction follow the R0 datasheet; pipe sizes, pump and valve duties are not published there and remain this generator\'s own estimates.','config':{**DEFAULT,'rows':4,'racks_per_row':16,'rack_power_W':188000.,'network_rows':2,'network_racks_per_row':12,'network_high_power_count':8,'layout_style':'central_network','cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r0','network_aisle_m':1.8288,
+ 'rd113':{'label':'RD113 R1 · equipment-list reference','description':'64 AI racks at the Max-Q 188 kW rack power, 32 networking racks totalling 880 kW, 8 Motivair MCDU-70 CDUs in two pods, 4 Uniflair fan walls. Counts, equipment and operating temperatures follow the supplied RD113 R1 documents; see references/rd113_r1. Pipe sizes, pump duties and valve coefficients are not published in that set and remain this generator\'s own estimates.','config':{**DEFAULT,'rows':4,'racks_per_row':16,'rack_power_W':188000.,'layout_style':'central_network','cdu_count':8,'redundancy':2,'pod_count':2,'ceiling_height_m':6.5,'standards_profile':'rd113_r0','network_aisle_m':1.8288,
+  # RD113_2.5 R1: 8 SMN + 8 N/S at 15 kW, 8 CME at 35 kW, 8 CIN at 45 kW = 32
+  # racks, 880 kW. The generator supports one base power plus one high-power
+  # band, so the 16 high racks carry their exact 40 kW average (8x35 + 8x45).
+  'network_rows':2,'network_racks_per_row':16,'network_rack_power_W':15000.,
+  'network_high_power_count':16,'network_high_power_W':40000.,
+  # RD113_4.2 R1 and RD113_3.3: 4 fan walls, 2 chillers N+1, 6 adiabatic fluid
+  # coolers N+1 (Dallas), CWP1-6 in two banks of three.
+  # CWP1-6 are two banks of three. The generator lays a pump bank out along +Y
+  # from the plant origin, and from the third unit the bank crosses the chiller
+  # supply and return collectors at py+4 and py+6 at the same elevation, which
+  # its own clearance check correctly rejects. Until the bank geometry is fixed
+  # the preset carries two per bank; see references/benchmarks/rd113_r1.json.
+  'air_unit_count':4,'chiller_count':2,'chiller_spares':1,'tower_count':6,'tower_spares':1,
+  'fws_pump_count':2,'fws_pump_spares':1,'cws_pump_count':2,'cws_pump_spares':1,
   # R0 p4/p9: compute 96% liquid, TCS 45/55 C, FWS 40/50 C. The preset carried
   # the generic 30/42 and 27/37 defaults until benchmark.py compared it with the
   # extracted source, which is a 15 K error in the design condition it claims.

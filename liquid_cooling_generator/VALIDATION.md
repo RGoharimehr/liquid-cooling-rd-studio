@@ -194,3 +194,70 @@ valve schedule with Kv at a stated pressure drop, or a CDU datasheet with a
 flow-versus-pressure-drop curve. Each of those becomes another fixture, and each
 `not_published` entry that disappears is a real increase in coverage.
 
+### RD113 R1: what the supplied document set validated
+
+Five documents were supplied — the table of contents, the R1 mechanical piping
+diagram, the R0 facility-cooling equipment list, the R1 IT-space equipment list
+and the R1 EDP-impacts note. They are recorded, with a SHA-256 each, in
+`references/rd113_r1/rd113_r1_findings.json`; the PDFs are not bundled.
+
+R1 supersedes the R0 datasheet the earlier preset was built from, and settles a
+conflict R0 had left open. The preset moves to R1:
+
+| | R0 | R1 |
+| --- | --- | --- |
+| Networking racks | 24, 640 kW (reconciled from conflicting 640 / 800 / 880 kW) | 32, 880 kW — 8 SMN + 8 N/S at 15 kW, 8 CME at 35 kW, 8 CIN at 45 kW |
+| Max-Q active AI racks | 64 | 56 (64 remain installed) |
+| Fan walls | not stated | 4 Uniflair FWCV40L2A |
+| CDUs | 8 | 8 Motivair MCDU-70, 2.5 MW at 4 °C approach |
+
+Twelve of fifteen published values now match exactly. Three are adjudicated —
+recorded, explained, and visible without failing the run:
+
+- **CDU duty, 2.89 MW against a 2.5 MW nameplate.** A redundancy-allocation
+  difference, not an arithmetic one. RD113 sizes on six of eight CDUs active
+  across the whole TCS loop (~14.3 MW over 6 = 2.38 MW). This generator treats
+  the two pods as independent and takes the worst case where both requested
+  outages land in the same pod, leaving two of four to carry it. The
+  generator's figure is the stricter one. Resolve by confirming whether RD113
+  permits load transfer between pods.
+- **Chiller duty.** RD113 runs two rejection plants — air-cooled chillers for
+  the fan walls, adiabatic fluid coolers for the L2L CDUs. The generator models
+  one plant serving the whole load, so its chiller duty is the full plant load.
+- **Pump count, 2 per bank against 6 on the diagram.** A generator limitation:
+  `plant.pumps` lays a bank out along +Y from the plant origin, so from the
+  third unit it crosses the chiller collectors at py+4 and py+6 at the same
+  elevation, and the clearance check correctly rejects it. The parameter
+  advertises 1–8 and only 1–2 place legally. The bank needs its own corridor,
+  or a reversed growth direction with matching junction axes.
+
+### Topology differences worth knowing
+
+The piping diagram is a full P&ID, so it can be compared on architecture as well
+as counts:
+
+- **One control valve per AI rack.** RD113 fits PCV01–PCV64, a modulating pod
+  control valve on every AI rack branch between isolation valves. The generator
+  fits a balancing valve on each rack return. A control valve needs an operating
+  range, authority and rangeability; the generator computes a single required Kv
+  at one design point, so it cannot size the RD113 device correctly.
+- **Two facility circuits.** ET-1 to ET-4 and DAS-1/DAS-2 are one expansion and
+  air-separation pair per circuit. The generator models a single circuit with one
+  of each.
+- **Liquid-cooled networking.** The 8 CIN racks at 45 kW are liquid-cooled. The
+  generator's network racks are air-only, so 360 kW sits on the air side here
+  and on the TCS side in RD113.
+
+### Still unchecked after this set
+
+The supplied documents publish no pipe schedule beyond a single DN150 connection,
+no pump duty (3.3 states the pumps are to be sized upon design implementation),
+no valve Kv or allocated pressure drop, and no CDU pressure-drop curve. The
+piping diagram states explicitly that it depicts system connections and is **not**
+representative of physical layout; the layout drawing is RD113_1.1X, which was
+not supplied.
+
+So this set validates the thermal, flow, count and topology half of the chain.
+Bore selection, reducers, Darcy loss, pump head and required Kv remain checked
+only for internal consistency by `validate_design.py`.
+

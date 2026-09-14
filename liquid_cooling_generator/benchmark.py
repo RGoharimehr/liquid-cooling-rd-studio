@@ -13,7 +13,9 @@ published design. A benchmark fixture holds:
     always be traced back to a page;
   * the configuration that represents that design in this generator;
   * the values the document publishes, each with a unit, a tolerance and the
-    page it came from;
+    page it came from, plus an optional `adjudication` for a difference someone
+    has already examined and explained, which stays visible without failing the
+    run;
   * and, just as important, a `not_published` list naming what the document does
     NOT state, so an unchecked quantity is visible rather than silently absent.
 
@@ -145,9 +147,15 @@ def compare(fixture, graph, config):
             continue
         scale = max(abs(published), 1e-12)
         error = abs(measured - published) / scale
-        rows.append({**item, 'measured': measured, 'error': error,
-                     'verdict': 'MATCH' if error <= tolerance + 1e-12 else 'DIFFERS',
-                     'detail': f'{error:.2%} against a {tolerance:.2%} tolerance'})
+        if error <= tolerance + 1e-12:
+            verdict, detail = 'MATCH', f'{error:.2%} against a {tolerance:.2%} tolerance'
+        elif item.get('adjudication'):
+            # A difference someone has already examined and explained stays
+            # visible but does not fail the run. An unexplained one does.
+            verdict, detail = 'NOTED', item['adjudication']
+        else:
+            verdict, detail = 'DIFFERS', f'{error:.2%} against a {tolerance:.2%} tolerance'
+        rows.append({**item, 'measured': measured, 'error': error, 'verdict': verdict, 'detail': detail})
     return rows
 
 
@@ -164,12 +172,12 @@ def render(fixture, rows, verbose=False):
         measured = row.get('measured')
         shown = f'{measured:,.4g}' if isinstance(measured, (int, float)) else '-'
         delta = f"{row['error']:.2%}" if row.get('error') is not None else '-'
-        mark = {'MATCH': 'ok  ', 'DIFFERS': 'DIFF', 'UNRESOLVED': 'n/a ', 'ERROR': 'ERR '}[row['verdict']]
+        mark = {'MATCH': 'ok  ', 'DIFFERS': 'DIFF', 'NOTED': 'note', 'UNRESOLVED': 'n/a ', 'ERROR': 'ERR '}[row['verdict']]
         out.append(f"   {row['id']:<{width}}{row['published']:>14,.4g}{shown:>14}{delta:>10}  {mark}"
                    + (f"  {row.get('unit', '')}" if row.get('unit') else ''))
         if row['verdict'] != 'MATCH' or verbose:
             out.append(f"   {'':<{width}}  {row['quantity']}  ·  {row.get('evidence', 'no page evidence recorded')}")
-            if row['verdict'] == 'DIFFERS':
+            if row['verdict'] in ('DIFFERS', 'NOTED'):
                 out.append(f"   {'':<{width}}  {row['detail']}")
     gaps = fixture.get('not_published', [])
     if gaps:
@@ -177,7 +185,8 @@ def render(fixture, rows, verbose=False):
         out += [f"     · {g['quantity']} — {g['note']}" for g in gaps]
     differing = [r for r in rows if r['verdict'] in ('DIFFERS', 'ERROR')]
     out += ['', f"   {sum(r['verdict'] == 'MATCH' for r in rows)}/{len(rows)} published values match; "
-                f"{len(differing)} differ; {sum(r['verdict'] == 'UNRESOLVED' for r in rows)} unresolved"]
+                f"{len(differing)} differ unexplained; {sum(r['verdict'] == 'NOTED' for r in rows)} adjudicated; "
+                f"{sum(r['verdict'] == 'UNRESOLVED' for r in rows)} unresolved"]
     return '\n'.join(out)
 
 

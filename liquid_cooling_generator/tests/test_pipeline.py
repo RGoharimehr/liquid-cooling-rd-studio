@@ -104,8 +104,10 @@ class PipelineTests(unittest.TestCase):
         g,p=build(replace(self.c,ceiling_height_m=4.1));self.assertGreater(g['metadata']['layout_compliance']['fail_count'],0)
         rd=Config(**PRESETS['rd113']['config']);g,p=build(rd)
         self.assertEqual(sum(c['kind']=='compute_rack' for c in g['components']),64)
-        self.assertEqual(sum(c['kind']=='network_rack' for c in g['components']),24)
-        self.assertEqual(g['layout']['network_power_W'],640000)
+        # RD113 R1: 32 networking racks, 880 kW (8 SMN + 8 N/S at 15 kW,
+        # 8 CME at 35 kW, 8 CIN at 45 kW). R0 had 24 racks and 640 kW.
+        self.assertEqual(sum(c['kind']=='network_rack' for c in g['components']),32)
+        self.assertEqual(g['layout']['network_power_W'],880000)
         ys=g['layout']['compute_row_y_m'];ny=g['layout']['network_origin_m'][1];self.assertLess(ys[1],ny);self.assertLess(ny,ys[2])
     def test_corpus_ids_and_partial_evidence(self):
         from verify import canonical_document_id,load_corpus

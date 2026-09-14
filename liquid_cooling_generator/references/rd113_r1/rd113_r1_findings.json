@@ -1,0 +1,124 @@
+{
+  "reference_design": "Schneider Electric EcoStruxure Reference Design 113",
+  "status": "extracted_from_supplied_documents; engineering reference data, not instructions. The PDFs are NOT bundled - each figure is traceable through the SHA-256 and the document/page recorded with it.",
+  "supersedes": "references/rd113_attachment/rd113_r0_findings.json (RD113DS R0). Where R0 and R1 disagree, R1 governs and the delta is recorded under revision_deltas.",
+  "documents": {
+    "RD113TOC_R1": {
+      "title": "Table of Contents", "revision": "1",
+      "sha256": "13255edf222e8e47721395d39ca6ab7adc1676dacd5d06be14d6f678dc20ec80",
+      "note": "Names RD113_1.1X facility site layout, RD113_3.2 mechanical piping diagram, RD113_4.3 CFD. Only 0.0, 2.5, 3.2, 3.3 and 4.2 were supplied."
+    },
+    "RD113_3.2_R1": {
+      "title": "Mechanical piping diagram", "revision": "1", "dated": "JUL 2026",
+      "sha256": "5b3e5885e95e13b8482e286aee1dd106542173282a7b221164033b1a951aa3e7",
+      "note": "Full chilled-water P&ID with tag inventory and legend. Drawing states it depicts system connections and is NOT representative of physical layout."
+    },
+    "RD113_3.3_R0": {
+      "title": "Equipment list - facility cooling", "revision": "0",
+      "sha256": "dced023d95a844cda7b9514789b100dc14d0a2db1240aefedbc4748ae6a44460",
+      "note": "Header text reads 'Reference Design 111'; document number and content are RD113. Treated as a typo in the source."
+    },
+    "RD113_4.2_R1": {
+      "title": "Equipment list - IT space", "revision": "1",
+      "sha256": "8f65108b479adc0aabfb6c09553c20e3fc92a5ac9188988eecc9a659c2ae23c7"
+    },
+    "RD113_2.5_R1": {
+      "title": "EDP impacts technical note", "revision": "1",
+      "sha256": "ebc1f2812831a8de2677343ba391a7adda00defedc76779f5515db0f5bc72def",
+      "note": "Electrical. Supplies the operating-state rack counts and the networking rack power breakdown."
+    }
+  },
+
+  "it_space": {
+    "ai_racks_installed": 64,
+    "ai_rack_model": "NetShelter Open Architecture Rack MGX v1.2, 600 mm wide, 1200 mm deep, 48U (still in development)",
+    "network_racks_installed": 32,
+    "network_rack_model": "NetShelter Open Architecture Rack MGX v1.1, 600 mm wide, 1200 mm deep, 48U",
+    "pods": 3,
+    "pod_type": "Prefabricated Modular EcoStruxure Pod Data Center, hot aisle containment",
+    "evidence": "RD113_4.2 R1 equipment list"
+  },
+
+  "operating_states": {
+    "max_q": { "active_ai_racks": 56, "ai_rack_kW": 188, "ai_rack_peak_kVA": 198 },
+    "max_p": { "active_ai_racks": 42, "ai_rack_kW": 227, "ai_rack_peak_kVA": 240 },
+    "evidence": "RD113_2.5 R1 Table 2. The piping diagram legend also names a Max-LPS state at 188 kW with all racks active.",
+    "note": "R0 described Max-Q as 64 active racks at 188 kW. R1 reduces it to 56. 64 remain installed."
+  },
+
+  "network_rack_breakdown": {
+    "SMN": { "count": 8, "kW": 15, "cooling": "air" },
+    "N_S": { "count": 8, "kW": 15, "cooling": "air" },
+    "CME": { "count": 8, "kW": 35, "cooling": "air" },
+    "CIN": { "count": 8, "kW": 45, "cooling": "liquid" },
+    "total_racks": 32,
+    "total_kW": 880,
+    "evidence": "RD113_2.5 R1 assumptions table for the counts and powers; RD113_3.2 R1 legend for the cooling type: 15 kW and 35 kW air-cooled, 45 kW liquid-cooled networking racks.",
+    "note": "R1 settles the networking conflict R0 left open: R0 observed 640, 800 and 880 kW in different places. 880 kW over 32 racks is consistent across 2.5 and 4.2."
+  },
+
+  "cdu": {
+    "count": 8,
+    "product": "Motivair MCDU-70 liquid-to-liquid",
+    "nameplate_capacity_W": 2500000,
+    "approach_K": 4,
+    "sizing_basis": "CDU flow rate is sized based on ALL racks connected to the TCS loop operating at Max-P (227 kW)",
+    "tags": ["CDU 1.1", "CDU 1.2", "CDU 1.3", "CDU 1.4", "CDU 2.1", "CDU 2.2", "CDU 2.3", "CDU 2.4"],
+    "evidence": "RD113_4.2 R1 for product and capacity; RD113_3.2 R1 note block for the sizing basis and the two banks of four."
+  },
+
+  "facility_cooling": {
+    "fan_walls": { "count": 4, "product": "Uniflair FWCV40L2A front-flow chilled-water fan wall", "tags": ["FW 1","FW 2","FW 3","FW 4"] },
+    "chillers": { "count": 2, "product": "Uniflair XCAF2524G air-cooled free-cooling chiller, oil-free centrifugal, dual supply",
+                  "capacity_W_dallas": 2223000, "capacity_W_san_francisco": 2385000,
+                  "serves": "fan walls", "redundancy": "N+1" },
+    "fluid_coolers": { "count_dallas": 6, "count_san_francisco": 5,
+                       "product": "Guntner GFD V-Shape adiabatic cooling system with HydroBlu",
+                       "capacity_W_dallas": 2805000, "capacity_W_san_francisco": 3636000,
+                       "serves": "L2L CDUs", "redundancy": "N+1" },
+    "chilled_water_pumps": { "count_on_diagram": 6, "tags": ["CWP1","CWP2","CWP3","CWP4","CWP5","CWP6"],
+                             "equipment_list_range": "5-8, to be sized upon design implementation",
+                             "arrangement": "two banks of three on the piping diagram" },
+    "pressurization_units": 2, "expansion_tanks_equipment_list": 2, "expansion_tank_tags_on_diagram": ["ET-1","ET-2","ET-3","ET-4"],
+    "chemical_dosing_pots": 2, "dirt_and_air_separators": 2,
+    "thermal_storage_tanks": { "count": 2, "volume_gallons_max": 30000, "tags": ["ST-1","ST-2"] },
+    "electrical_room_dx": { "count": 16, "capacity_W": 42000 },
+    "mechanical_room_dx": { "count": 4, "capacity_W": 15000 },
+    "evidence": "RD113_3.3 R0 equipment list; tags and arrangement from RD113_3.2 R1."
+  },
+
+  "piping_tag_inventory": {
+    "note": "Tag prefixes and the highest number seen on the drawing. The diagram repeats tags across sheet regions, so a highest number is an upper bound on quantity, NOT a count. Only use these for topology comparison, never as an equipment count.",
+    "isolation_valve_ISV_max": 431,
+    "pod_control_valve_PCV_max": 64,
+    "balancing_valve_BAV_max": 14,
+    "strainer_STR_max": 10,
+    "check_valve_CV_max": 6,
+    "safety_valve_SAV_max": 4,
+    "temperature_indicator_T_max": 12,
+    "pressure_indicator_PIW_max": 8,
+    "topology_observations": [
+      "PCV01-PCV64 is one pod control valve per AI rack, each flanked by isolation valves on the branch.",
+      "BAV11-BAV14 is one balancing valve per fan wall; BAV01-BAV10 sit in the plant.",
+      "Each CDU carries isolation valves on all four ports; CDU banks tie to a common header pair per pod.",
+      "General notes: install air vents at high points, install drainages at low points."
+    ],
+    "published_pipe_sizes": ["DN150 on the pressurisation/expansion connections"],
+    "evidence": "RD113_3.2 R1"
+  },
+
+  "not_published_in_supplied_set": [
+    "Pipe schedule: diameters per run, materials, insulation, support spacing. Only a DN150 connection size appears.",
+    "Pump schedule: duty flow, head, power for CWP1-6. 3.3 states they are to be sized upon design implementation.",
+    "Valve schedule: Kv or Cv, allocated pressure drop, operating range or authority for any ISV, PCV or BAV.",
+    "CDU pressure-drop curve, primary and secondary flow rates at the rated 2.5 MW.",
+    "TCS and FWS design temperatures are not restated in this set; R0 supplies 45/55 C and 40/50 C.",
+    "Physical layout. RD113_3.2 states explicitly that it depicts system connections and is not representative of physical layout; RD113_1.1X is the layout drawing and was not supplied."
+  ],
+
+  "revision_deltas_R0_to_R1": [
+    { "item": "network racks", "r0": "24 racks, 640 kW (diagram-reconciled from conflicting 640/800/880 kW observations)", "r1": "32 racks, 880 kW, split 8x15 SMN + 8x15 N/S + 8x35 CME + 8x45 CIN", "effect": "R1 resolves the conflict R0 recorded as unresolved" },
+    { "item": "Max-Q active AI racks", "r0": "64", "r1": "56", "effect": "Max-Q liquid load falls from 12 032 kW to 10 528 kW at 188 kW per rack" },
+    { "item": "networking cooling", "r0": "all networking air-cooled", "r1": "the 8 CIN racks at 45 kW are liquid-cooled", "effect": "360 kW moves from the air loop to the TCS loop; the generator's network racks are air-only and cannot represent this" }
+  ]
+}
