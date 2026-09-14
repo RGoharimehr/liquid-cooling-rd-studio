@@ -6,7 +6,7 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 export type Component={id:string;kind:string;service:string;ports:string[];attachment?:boolean;center_m?:number[];size_m?:number[];rotation_deg?:number;port_details?:{circuit_id:string}[];nominal_size_in?:number;mesh:{vertices:number[][];faces:number[][]}};
 export type Graph={components:Component[];nodes:{id:string;xyz_m:number[]}[];metadata:Record<string,any>;layout:{clearance_zones:{id:string;center_m:number[];size_m:number[];rotation_deg?:number}[];network_power_W:number;editable_zones?:EditableZone[]};edges:any[]};
 export const color=(c:Component)=>c.kind==='compute_rack'?'#304956':c.kind==='network_rack'?'#9174b0':(c.kind==='cdu_enclosure'||c.kind==='cdu')?'#6498a6':c.kind==='chiller'?'#748498':c.kind==='cooling_tower'?'#879fa8':c.attachment?'#a1aba4':c.service==='CWS'?'#497dc0':c.service==='TCS'?'#0c9993':'#d2913e';
-export default function Viewer({graph,mode,clearances,accessories,onSelect,editing=false,editLocked=false,editRevision=0,onZoneMove,onZoneEdit}:{editing?:boolean;editLocked?:boolean;editRevision?:number;onZoneMove?:(zone:EditableZone,point:number[])=>void;onZoneEdit?:(zone:EditableZone,edit:ZoneEdit)=>void;graph:Graph;mode:'3d'|'plan';clearances:boolean;accessories:boolean;onSelect:(c:Component)=>void}){
+export default function Viewer({graph,draftConfig,mode,clearances,accessories,onSelect,editing=false,editLocked=false,editRevision=0,onZoneMove,onZoneEdit}:{draftConfig?:Record<string,any>;editing?:boolean;editLocked?:boolean;editRevision?:number;onZoneMove?:(zone:EditableZone,point:number[])=>void;onZoneEdit?:(zone:EditableZone,edit:ZoneEdit)=>void;graph:Graph;mode:'3d'|'plan';clearances:boolean;accessories:boolean;onSelect:(c:Component)=>void}){
  const mount=useRef<HTMLDivElement>(null);const [error,setError]=useState('');
  useEffect(()=>{
   if(mode!=='3d'||!mount.current)return;
@@ -31,6 +31,6 @@ export default function Viewer({graph,mode,clearances,accessories,onSelect,editi
   renderer.domElement.addEventListener('pointerdown',pointerdown);renderer.domElement.addEventListener('pointerup',pick);
   return()=>{cancelAnimationFrame(frame);observer.disconnect();controls.dispose();scene.traverse(o=>{if(o instanceof THREE.Mesh){o.geometry.dispose();(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.dispose());}});renderer.dispose();renderer.domElement.remove();};
  },[graph.components,graph.nodes,graph.layout,mode,clearances,accessories,onSelect]);
- if(mode==='plan')return <PlanEditor graph={graph} clearances={clearances} accessories={accessories} onSelect={onSelect} editing={editing} locked={editLocked} revision={editRevision} onMove={onZoneMove} onEdit={onZoneEdit}/>;
+ if(mode==='plan')return <PlanEditor graph={graph} draftConfig={draftConfig} clearances={clearances} accessories={accessories} onSelect={onSelect} editing={editing} locked={editLocked} revision={editRevision} onMove={onZoneMove} onEdit={onZoneEdit}/>;
  return <div className="three-view" ref={mount} role="img" aria-label="Interactive three-dimensional network. Drag to orbit, scroll to zoom, click a component to inspect.">{error&&<p className="render-error">{error}</p>}</div>
 }

@@ -15,6 +15,10 @@ def describe(field):
     if k.startswith('layout_') and k!='layout_style':field['group']='Site placement';effect='Moves or rotates the complete model in world coordinates, including the plant. The plan origin marker and exported coordinates show the change.'
     if k.startswith('site_footprint'):field['group']='Site placement';effect='Defines the fixed world-coordinate boundary used by placement checks. Both dimensions must be positive; zero disables the boundary.'
     if k in POD_ARRAYS:field['group']='Cooling pods';effect='Explicit pod transforms; empty uses automatic placement. Plan → Arrange zones edits these same values.'
+    if k=='redundancy':
+        field['label']='Simultaneous CDU outages'
+        effect='Enumerates every combination of this many offline CDUs across all independent pods. A pod losing every CDU is a blocking connectivity finding. This is not a per-pod certified N+R rating; equipment capacity remains unverified.'
+        field['source']['note']=effect
     if k.startswith('plant_') and k!='plant_type':active['plant_type']=PLANT
     if k.startswith(('chiller_','fws_pump_')):active['plant_type']=PLANT
     if k.startswith(('cws_','tower_')) or k=='chiller_cop':active['plant_type']='water_cooled'

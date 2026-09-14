@@ -230,7 +230,7 @@ def run(graph,config,profile):
     """Active layout checks plus evidence audit; legacy pressure decisions are archived."""
     from placement import installation_diagnostics
     docs,meta=load_corpus();evidence=verify_evidence(docs,meta)
-    rows=graph['metadata']['layout_compliance']['results']+installation_diagnostics(graph,config,profile)['checks']+graph['metadata'].get('geometry_diagnostics',{}).get('checks',[])
+    rows=graph['metadata']['layout_compliance']['results']+installation_diagnostics(graph,config,profile)['checks']+graph['metadata'].get('geometry_diagnostics',{}).get('checks',[])+graph['metadata'].get('connectivity_scenarios',{}).get('checks',[])
     models=[{'id':f'G{i+1:03}','severity':'blocking',**r,'expected':r.get('required')} for i,r in enumerate(rows)]
     ids=[c['id'] for c in graph['components']];nodes={n['id'] for n in graph['nodes']}
     owners={}

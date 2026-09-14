@@ -304,9 +304,10 @@ def evaluate(graph, config, *, use_applied_sizes=False):
     duty_flows = {(e['component_id'],'FWS'):prescribed[e['id']] for e in air_edges}; family_totals = dict(flow_by_pod, FWS=fws_total, CWS=cws_total)
     for circuit, items in cdu_by_pod.items():
         installed = len(items); surviving = installed - global_spares
+        minimum_active=max(0,surviving)
         if surviving <= 0:
             warnings.append({'code': 'POD_SPARES_UNRESOLVED', 'circuit_id': circuit,
-                             'detail': 'Configured global CDU outages can remove every CDU in this pod; no duty-capacity guarantee.'})
+                             'detail': 'Requested simultaneous CDU outages can remove every CDU in this pod. No CDU size can satisfy the disconnected outage case; reported flow/loss screens cover surviving-unit cases only.'})
             surviving = 1
         for edge in items:
             prescribed[edge['id']] = flow_by_pod[circuit] / installed
@@ -314,7 +315,10 @@ def evaluate(graph, config, *, use_applied_sizes=False):
             duty_flows[(cid, 'TCS')] = flow_by_pod[circuit] / surviving
             duty_flows[(cid, 'FWS')] = heat_flow(heat_by_pod[circuit], 'FWS') / surviving
             duties[cid] = {'pod': circuit, 'all_online_heat_W': heat_by_pod[circuit] / installed,
-                           'screening_duty_heat_W': heat_by_pod[circuit] / surviving,
+                           'screening_duty_heat_W': heat_by_pod[circuit] / surviving if minimum_active else None,
+                           'surviving_unit_heat_screen_W': heat_by_pod[circuit] / surviving,
+                           'minimum_active_cdus':minimum_active,
+                           'redundancy_status':'CONNECTIVITY_ONLY_UNVERIFIED_CAPACITY' if minimum_active else 'POD_UNAVAILABLE_IN_REQUESTED_OUTAGE',
                            'all_online_TCS_m3_s': prescribed[edge['id']],
                            'duty_TCS_m3_s': duty_flows[(cid, 'TCS')], 'duty_FWS_m3_s': duty_flows[(cid, 'FWS')]}
     kinds = defaultdict(list)
@@ -511,6 +515,9 @@ def evaluate(graph, config, *, use_applied_sizes=False):
                     pump_dp_Pa=dp, pump_head_m=dp / (fluid['rho_kg_m3'] * G), hydraulic_power_W=flow * dp,
                     estimated_input_power_W=flow * dp / efficiency, efficiency=efficiency,
                     efficiency_basis='Assumed overall wire-to-water efficiency; use a matching efficiency when interpreting input power')
+                if service=='TCS' and duties.get(pump['component_id'],{}).get('minimum_active_cdus')==0:
+                    item.update(status='INCOMPLETE_OUTAGE_COVERAGE',
+                        outage_limitation='Surviving-unit screen only. A requested outage isolates the entire pod; no pump duty can serve that disconnected case.')
             pumps.append(item)
     unresolved = pending + warnings
     suggested_config = {}
@@ -536,7 +543,7 @@ def evaluate(graph, config, *, use_applied_sizes=False):
             'assumptions': {'K_by_kind': k_values, 'allocated_dp_Pa_by_kind': allocations,
                 'K_reference': 'Selected local bore; reducer uses smaller connected bore',
                 'flow_sharing': 'All modeled units share equally within their assigned pod or plant bank; installed spare units are included in all-online flows',
-                'sizing_envelope': 'Rack and row demands, full circuit main flow, and equipment duty division by installed-minus-spares. These maxima do not represent one solved operating network.',
+                'sizing_envelope': 'Rack and row demands, full circuit main flow, and equipment duty division by minimum surviving units in each independent pod or plant bank. A fully isolated pod has unresolved CDU duty; flow/loss screens then cover surviving-unit cases only. These maxima do not represent one solved operating network.',
                 'equipment': 'CDU and chiller allocations apply independently to each fluid side; rack allocation represents aggregate IT-side loss',
                 'flexibility': 'Default hose K=0 is an explicit unverified placeholder; hose/QD vendor curves remain required',
                 'scope': 'No pump-curve intersection, pressure balancing, controls stability, operating redundancy, NPSH, cavitation, transient, or certified capacity assessment'},

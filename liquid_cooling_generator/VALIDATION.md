@@ -1,18 +1,16 @@
-# Validation record — 13 September 2026
+# Validation record — 14 September 2026
 
-The current engine suite passed **106 Python tests and 12 subtests**, including the zone-editing, worker-session recovery and Manual-mode equipment-matching repairs. The command was `.venv-ifc/bin/python -m pytest -q` from the engine directory, with pytest and IfcOpenShell available.
-
-Current zone-interaction, finder transport/cancellation, and 12 design-action JavaScript tests passed; TypeScript and the production build passed. All three shipped presets passed Pyodide generation and export checks with 1,586, 2,877 and 2,256 components. After the browser exposed a numeric JSON hash mismatch, the shared hash was normalized across Python/browser number representations. The final full suite passed 105 tests and 12 subtests; its one legacy test fixture still used the former hash algorithm. After updating that fixture, all 11 equipment-requirement tests passed. No engine assertion remains failing.
+The full engine suite passed **110 tests and 15 subtests** using `.venv-ifc/bin/python -m pytest -q`. All frontend scripts passed: zone-interaction, zone-draft, agent (12 tests), finder, and engine/Pyodide. TypeScript passed. The three shipped presets generated and exported 1,586, 2,877 and 2,256 components in Pyodide.
 
 ## Current repair regressions
 
-- A no-op zone click preserves automatic placement arrays and the applied configuration hash.
-- Consecutive zone moves regenerate and apply without a separate Apply call, and the resulting design remains exportable.
-- Placement rejection, a generation exception, or blocking routed geometry restores the prior successful engine session and its exports.
-- A cancelled worker can restore the applied configuration and its matching equipment report. A mismatched restoration hash is rejected before session mutation.
-- Manual sizing calculates duties using retained commercial bores, without modifying the selected dimensions. Equipment requirements and candidate qualification retain manual velocity-limit warnings and reject inconsistent bore metadata.
+- Active pipeline N+0/N+1/N+2 cases enumerate the correct CDU outage combinations; inactive units and their isolation paths are removed. Scenario heat is conserved within each pod.
+- Global N+2 with only two CDUs per independent pod explicitly reports unavailable pods and unserved heat, fails required connectivity checks, and marks affected equipment duties unresolved. Relaxing the declared outage count repairs the same editable concept.
+- Browser imports preserve explicit air-cooled/water-cooled plant choices for missing, v1 and v2 schema markers. Legacy files with no plant retain boundary scope. Unknown keys and unsupported versions are rejected.
+- Draft arrangement tests cover repeated moves, independent zone edits, four rotations, repeated flips, world origin/rotation transforms, overlap detection, and no-op selection without changing applied inputs.
+- The browser no longer invokes the zone auto-apply API. The older atomic Python API remains covered for compatibility; its tests do not define the current UI behavior.
 
-The interface also keeps zone handles mounted during checks and provides Discard pending changes, Undo zone move and restoration of the last valid design. The in-app browser checks below exercise actual pointer events and the module worker.
+In the local in-app browser, the actual zone selector, Rotate 90°, Flip X and Flip Y worked before generation. Three rotations, repeat flips, two pointer drags, one-action Undo, and a pod keyboard move accumulated in a draft without starting a worker. Apply ran once for the full draft and reported a specific FWS elbow clash. Further draft changes and Apply repaired that same design without changing presets; normal downloads became enabled at hash prefix `b266d04580f7`. The package action started, but a browser reload prevented confirmation of its completion. Engine exports passed independently; no current browser ZIP was inspected on disk. The final production build passed.
 
 ## Verified engine coverage
 
@@ -37,7 +35,7 @@ The review ZIP contains no IFC, PCF, native Flownex project or native Revit hand
 
 ## Browser observations
 
-On 13 September, local in-app browser cold startup, Manual-mode Apply and catalogue search completed (100 of 330 component duties had candidates, with unresolved qualification retained). A no-op handle click preserved the applied model. Two consecutive pointer drags moved pod 1 from x=0 to 0.5 m and 1.0 m without another Apply; the final hash prefix was `655852bfcf3e`. Handles and download controls remained usable. An overlapping move was rejected with named equipment/service-access conflicts and retained that design. The full-package action reached “Download prepared from the applied design.” Cancelling another package operation retained the model and download buttons. Browser retry after cancellation was interrupted by a page reload; restored-session export and repeated browser-number round trips passed the Python regressions. The current browser download was not independently inspected on disk.
+Historical version 6 behavior, superseded by draft arrangement above: on 13 September, local in-app browser cold startup, Manual-mode Apply and catalogue search completed (100 of 330 component duties had candidates, with unresolved qualification retained). A no-op handle click preserved the applied model. Two consecutive pointer drags moved pod 1 from x=0 to 0.5 m and 1.0 m without another Apply; the final hash prefix was `655852bfcf3e`. Handles and download controls remained usable. An overlapping move was rejected with named equipment/service-access conflicts and retained that design. The full-package action reached “Download prepared from the applied design.” Cancelling another package operation retained the model and download buttons. Browser retry after cancellation was interrupted by a page reload; restored-session export and repeated browser-number round trips passed the Python regressions. The current browser download was not independently inspected on disk.
 
 On 9 September, actual in-app browser module-worker cold startup and Apply completed successfully. A 90-degree plant rotation was accepted by top-view placement preflight and Apply regenerated an exportable model with hash `d71dfbb7b4c4914439e1a44a2ce657bee0cd6b9427dddfd77a299cf65e7fdfcf`. The browser saved `graph-json-bundle.zip`; ZIP integrity passed and its graph carried that exact applied hash. The final frontend build and Pyodide preset checks passed. This record does not imply that every interactive scenario was repeated in both browsers.
 

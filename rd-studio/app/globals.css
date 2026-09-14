@@ -167,3 +167,15 @@ body {
 .nominal-size-select{width:100%;padding:7px 10px;border:1px solid #cdd7cc;border-radius:6px;background:white;font-size:13px}.nominal-size-select:disabled{opacity:.5}
 
 .export-reason{font-size:11px;line-height:1.5;color:#536f65;margin-bottom:10px}.export-actions>button+button{margin-top:8px}.zone-handle[aria-disabled=true]{cursor:wait;opacity:.65}.zone-edit-tools button:disabled{opacity:.5}.view-options>button{font-size:11px;color:#226759;text-decoration:underline}
+
+/* Keep the SVG below the real controls; an absolute inset canvas intercepted clicks. */
+.plan-editor-shell{position:absolute;inset:0;height:auto;min-height:0}
+.plan-editor-shell .actual-plan{position:relative;inset:auto;flex:1 1 0;height:0;width:100%;min-height:0}
+.zone-edit-tools{position:relative;z-index:2;flex:0 0 auto}
+.zone-edit-tools button[aria-pressed=true]{background:#176d67;color:white;border-color:#176d67}
+.zone-handle.selected>rect:first-child{stroke:#d58a29;stroke-width:.13}
+.draft-placement-note{position:relative;z-index:1;flex:0 0 auto;padding:8px 12px;background:#fff3da;color:#775923;font-size:12px;line-height:1.45}
+.draft-placement-note details{max-height:110px;overflow:auto}.draft-placement-note summary{cursor:pointer;font-weight:600}
+.canvas-help,.canvas-coordinate{pointer-events:none}
+
+.outage-review{margin:0 0 18px;padding:12px 16px;background:#f8faf7;border:1px solid #d5deda;font-size:12px;line-height:1.5}.outage-review summary{cursor:pointer;font-weight:600}.outage-review p{margin:10px 0;color:#566c63}.outage-table-scroll{overflow:auto;max-height:280px}.outage-review table{border-collapse:collapse;width:100%;text-align:left}.outage-review td,.outage-review th{padding:7px 10px;border-bottom:1px solid #dce4dd}

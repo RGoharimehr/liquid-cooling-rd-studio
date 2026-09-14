@@ -208,8 +208,7 @@ def generate(c,profile):
         add_plant(b)
     b.g['metadata']['pod_assignments']={'rows':b.rows,'cdus':b.cdus}
     b.g['metadata']['standards']=profile.manifest()
-    b.g['metadata']['redundancy']={'total_units':c.cdu_count,'duty_units':c.cdu_count-c.redundancy,'spare_units':c.redundancy,'scope':'Connectivity/isolation only; no capacity or pressure verification'}
-    units=list(range(1,c.cdu_count+1))
-    b.g['scenarios']=[{'name':'all_online','kind':'operating','active_cdus':units},{'name':'design','kind':'design','active_cdus':units}]
+    from cdu_scenarios import attach
+    attach(b.g,c,b.rows,b.cdus)
 
     return b.g

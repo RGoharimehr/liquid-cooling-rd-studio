@@ -188,11 +188,14 @@ def build_requirements(graph, config=None, sizing=None):
         duty = duties.get(cid, {}); thermal = None
         if kind == 'cdu':
             thermal = {'required_capacity_W': duty.get('screening_duty_heat_W'), 'all_online_heat_W': duty.get('all_online_heat_W'),
+                'redundancy_status':duty.get('redundancy_status'),
                 'heat_transfer_type': 'liquid_to_liquid', 'cooling_phase': 'single_phase',
                 'basis': 'Independent CDU duty envelope for the assigned pod; not nameplate capacity at arbitrary temperatures',
                 'TCS_supply_C': config.get('tcs_supply_C'), 'FWS_supply_C': config.get('fws_supply_C'),
                 'required_approach_K': config.get('tcs_supply_C', 0) - config.get('fws_supply_C', 0),
                 'vendor_performance_map_required': True}
+            if duty.get('redundancy_status')=='POD_UNAVAILABLE_IN_REQUESTED_OUTAGE':
+                unresolved.append(_issue('POD_UNAVAILABLE_IN_REQUESTED_OUTAGE','Requested simultaneous outages can isolate every CDU in this pod. Change the CDU count/assignments or the project outage requirement; a larger CDU cannot fix the missing connection.'))
         elif kind in ('chiller', 'cooling_tower','air_unit'):
             key = 'FWS_duty_heat_W' if kind in ('chiller','air_unit') else 'CWS_duty_heat_W'
             thermal = {'required_capacity_W': duty.get(key), 'condenser_heat_W': duty.get('CWS_duty_heat_W'),
