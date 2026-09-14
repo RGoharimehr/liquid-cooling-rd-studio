@@ -34,7 +34,7 @@ def catalog():
         if key in ('include_quick_disconnects','include_flex_connectors','include_rack_isolation_valves','include_rack_balancing_valves'):
             title='OCP rack manifold guidance';url=MANIFOLD;clause='Plumbing/serviceability, p.16';note='Guidance supports serviceable plumbing, local flow control and quick couplings. Component counts and hose envelopes are project assumptions.'
         if 'velocity_cap' in key:
-            title='OCP Modular TCS, final 2025';url=TCS;clause='§3.5';note='Final guidance discusses velocity tradeoffs; these numeric caps are project assumptions, not mandatory OCP limits. Active only in heat-balance sizing.'
+            title='OCP Modular TCS, final 2025';url=TCS;clause='§3.5';note='Final guidance discusses velocity tradeoffs; these numeric caps are project assumptions, not mandatory OCP limits. Preliminary sizing rounds each pipe family up to them; Manual sizing keeps the entered bore and reports the exceedance.'
         if key=='aisle_width_m':
             title='RD113 R0, attached reference';url=RD;clause='p.5, hot aisle';note='Default 1.8288 m equals the 6 ft hot aisle in R0. Applied as a configurable shared aisle here; cold-aisle/service allowances require project review. Public page now serves a newer revision.';status='reference'
         if key.startswith('rack_') and key.endswith(('width_m','depth_m')):
@@ -42,7 +42,7 @@ def catalog():
         if 'nominal' in key or 'material' in key:
             title='Commercial pipe dimension catalogues';clause='ASME B36.19M/B36.10M; ASTM B88';note='Nominal selections are project inputs. OD/ID dimensions come from the selected catalogue; wetted-material compatibility and vendor connector sizes require verification.'
         if key in ('tcs_supply_C','tcs_delta_K','fws_supply_C','fws_delta_K','pg_volume_fraction'):
-            note='Stored design condition. Optional heat-balance sizing currently supports 25% PG at mean 36°C and water at mean 32°C; manual geometry does not require fluid properties.'
+            note='Stored design condition. Enter the density, specific heat and viscosity that match this formulation at its mean temperature under Sizing estimates; they are used exactly as entered and are not checked against a property table.'
         if key=='cdu_origin_y_m':note='Used only with custom CDU placement. End and central galleries calculate their Y origin from the layout.'
         field={'key':key,'label':label,'group':group,'type':'boolean' if isinstance(value,bool) else ('select' if isinstance(value,str) else 'json' if isinstance(value,list) else 'number'),'unit':unit,'default':value,'source':{'title':title,'url':url,'clause':clause,'status':status,'note':note}}
         from guidance import SOURCES
@@ -61,7 +61,6 @@ def catalog():
         if key in ('manifold_elevation_m','include_flex_connectors','vendor_hose_min_bend_radius_m'):field['source']['note']='Reserved rack interface/vendor input. Server manifolds and routed hoses are outside the aggregate rack representation.'
         if key.startswith(('chiller_','fws_pump_')) and not is_sizing:field['active_when']={'plant_type':['air_cooled','water_cooled']}
         if key.endswith('_nominal_in'):field['active_when']={'sizing_mode':'manual'}
-        if 'velocity_cap' in key:field['active_when']={'sizing_mode':['preliminary','heat_balance']}
         if is_sizing:
             field['active_when']={'sizing_mode':'preliminary'}
             field['source']={'title':'ASHRAE Fundamentals · flow and piping','edition':'2025 Handbook—Fundamentals','clause':'Ch. 3 Fluid Flow; Ch. 22 Pipe and Tube Design','status':'assumption','applicability':'Prescribed-flow screening with manual or automatically rounded pipe dimensions','url':'https://handbook.ashrae.org/Handbooks/F25/SI/F25_Ch22/F25_Ch22_si.aspx','note':'Method supported by the source; this numeric input is a project assumption. Fluid properties must match the selected formulation and mean temperature. Equipment losses and efficiency require vendor confirmation.'}
