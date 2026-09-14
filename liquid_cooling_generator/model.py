@@ -132,6 +132,7 @@ class Config:
     pump_head_margin_fraction: float = 0.15
     valve_design_dp_kPa: float = 20.0
     cdu_design_dp_kPa: float = 50.0
+    cdu_available_head_kPa: float = 0.0
     rack_design_dp_kPa: float = 30.0
     chiller_design_dp_kPa: float = 50.0
     chiller_cop: float = 5.0
@@ -276,7 +277,7 @@ class Config:
         for key in ('flow_lpm_per_kw','chiller_cop','tcs_density_kg_m3','tcs_specific_heat_J_kgK','tcs_viscosity_Pa_s','fws_density_kg_m3','fws_specific_heat_J_kgK','fws_viscosity_Pa_s','cws_density_kg_m3','cws_specific_heat_J_kgK','cws_viscosity_Pa_s'):
             if getattr(self,key)<=0:raise ValueError(key+' must be positive')
         if not 0<self.pump_efficiency<=1:raise ValueError('Pump total efficiency must be between 0 and 1')
-        for key in ('pump_head_margin_fraction','valve_design_dp_kPa','cdu_design_dp_kPa','rack_design_dp_kPa','chiller_design_dp_kPa','cws_static_lift_m','tower_nozzle_dp_kPa','site_footprint_width_m','site_footprint_depth_m'):
+        for key in ('pump_head_margin_fraction','valve_design_dp_kPa','cdu_design_dp_kPa','cdu_available_head_kPa','rack_design_dp_kPa','chiller_design_dp_kPa','cws_static_lift_m','tower_nozzle_dp_kPa','site_footprint_width_m','site_footprint_depth_m'):
             if getattr(self,key)<0:raise ValueError(key+' must be nonnegative')
         if bool(self.site_footprint_width_m)!=bool(self.site_footprint_depth_m):raise ValueError('Provide both footprint dimensions, or set both to zero for unrestricted placement')
         if not isinstance(self.pod_origins_m,list) or (self.pod_origins_m and (len(self.pod_origins_m)!=self.pod_count or any(not isinstance(p,list) or len(p)!=2 or any(type(v) not in (int,float) or not math.isfinite(v) for v in p) for p in self.pod_origins_m))):raise ValueError('Pod origins must be empty or one [x,y] pair per pod')

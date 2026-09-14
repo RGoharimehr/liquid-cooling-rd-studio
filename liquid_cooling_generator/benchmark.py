@@ -91,7 +91,9 @@ def _duty(graph, component, attribute):
         return None
     return {'heat_kW': (duty.get('screening_duty_heat_W') or duty.get('FWS_duty_heat_W')
                         or duty.get('CWS_duty_heat_W') or 0.) / 1000.,
+            'all_online_heat_kW': (duty.get('all_online_heat_W') or 0.) / 1000.,
             'TCS_L_min': (duty.get('duty_TCS_m3_s') or 0.) * 60000.,
+            'all_online_TCS_L_min': (duty.get('all_online_TCS_m3_s') or 0.) * 60000.,
             'FWS_L_min': (duty.get('duty_FWS_m3_s') or duty.get('FWS_duty_m3_s') or 0.) * 60000.}.get(attribute)
 
 
@@ -147,7 +149,18 @@ def compare(fixture, graph, config):
             continue
         scale = max(abs(published), 1e-12)
         error = abs(measured - published) / scale
-        if error <= tolerance + 1e-12:
+        # A published limit is satisfied by being on the right side of it, not by
+        # matching it. Available pump head and velocity caps are limits.
+        comparison = item.get('comparison', 'equals')
+        if comparison == 'at_most' and measured <= published * (1 + tolerance) + 1e-12:
+            rows.append({**item, 'measured': measured, 'error': error, 'verdict': 'MATCH',
+                         'detail': f'within the published limit, {1 - measured / scale:.1%} margin'})
+            continue
+        if comparison == 'at_least' and measured >= published * (1 - tolerance) - 1e-12:
+            rows.append({**item, 'measured': measured, 'error': error, 'verdict': 'MATCH',
+                         'detail': f'at or above the published floor, {measured / scale - 1:.1%} margin'})
+            continue
+        if error <= tolerance + 1e-12 and comparison == 'equals':
             verdict, detail = 'MATCH', f'{error:.2%} against a {tolerance:.2%} tolerance'
         elif item.get('adjudication'):
             # A difference someone has already examined and explained stays

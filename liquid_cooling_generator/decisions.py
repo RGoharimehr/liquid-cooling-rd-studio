@@ -163,10 +163,18 @@ def _(g, c, P):
     screens = [s for s in (g['metadata'].get('preliminary_sizing') or {}).get('pump_screens', [])
                if str(s.get('circuit_id', '')).startswith('TCS') and s.get('pump_dp_Pa') is not None]
     if not screens:
-        return None, 'no TCS pump screen', 80.0, 'psi; run preliminary sizing to evaluate'
-    worst = max(s['pump_dp_Pa'] for s in screens)
-    return worst * PSI_PER_PA <= 80.0, worst * PSI_PER_PA, 80.0, \
-        'psi required at the prescribed duty, including margin, vs IT dP available 80-90 psi'
+        return None, 'no TCS pump screen', None, 'psi; run preliminary sizing to evaluate'
+    worst = max(s['pump_dp_Pa'] for s in screens) * PSI_PER_PA
+    # Prefer the selected CDU's published available secondary head. The 80-90 psi
+    # figure belongs to the Deschutes reference unit and governs nothing when a
+    # different CDU is specified.
+    available = c.cdu_available_head_kPa * 1000 * PSI_PER_PA
+    if available > 0:
+        return worst <= available, worst, available, \
+            'psi required at the prescribed duty including margin, against the available head entered for the selected CDU'
+    return worst <= 80.0, worst, 80.0, \
+        'psi required at the prescribed duty including margin, vs the Deschutes reference CDU 80-90 psi. ' \
+        'Enter cdu_available_head_kPa to check against the unit actually selected.'
 
 
 @check('approach_matches_spec')

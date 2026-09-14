@@ -1,0 +1,43 @@
+{
+  "benchmark": "motivair_mcdu70_in_rd113",
+  "source": {
+    "title": "Motivair MCDU-70 selection table, applied to the RD113 R1 design",
+    "revision": "unstated",
+    "publisher": "Motivair",
+    "sha256": null,
+    "extraction": "references/motivair/mcdu_selection_table.json",
+    "basis": "Selection table supplied as a screenshot; no file hash could be recorded. RD113_4.2 R1 names the MCDU-70 as the CDU for this design, so the unit's published data becomes an acceptance limit for the generated TCS circuit."
+  },
+  "status": "The first source in this repository that publishes a flow rate, a connection size and an available pump head, so it is the first external check on steps 3 and 6 of the sizing chain.",
+  "config": { "preset": "rd113", "overrides": {} },
+
+  "expected": [
+    { "id": "tcs_head_psi", "quantity": "pump.CDU-01.dp_kPa", "published": 262, "unit": "kPa (38 psi)",
+      "comparison": "at_most", "tolerance": 0,
+      "evidence": "MCDU-70 nominal available pump head pressure 38 psi. The generated TCS circuit must live inside the head the selected unit actually offers." },
+
+    { "id": "cdu_capacity_kW", "quantity": "duty.CDU-01.all_online_heat_kW", "published": 2500, "unit": "kW",
+      "tolerance": 0.02,
+      "evidence": "2500 kW at primary 105.8 F (41.0 C) and secondary 25% PG at 113 F (45.0 C) - RD113's own FWS 40 C and TCS 45 C.",
+      "adjudication": "Different operating state. The preset carries Max-Q rack power (188 kW), giving 1444 kW per unit with all eight online. RD113 sizes the CDU on Max-P (227 kW) with six of eight active: 64 racks at 227 kW x 0.96 plus the 8 liquid CIN racks is about 14.3 MW over 6 units, roughly 2.4 MW, which is what the 2.5 MW rating covers. Both figures are correct for their own stated state; the generator represents one operating state at a time and this preset represents Max-Q." },
+
+    { "id": "secondary_flow_L_min", "quantity": "duty.CDU-01.all_online_TCS_L_min", "published": 3750, "unit": "L/min (991 GPM)",
+      "tolerance": 0.02,
+      "evidence": "MCDU-70 nominal secondary flowrate 991 GPM, which reproduces the 2500 kW rating at a 10 K rise.",
+      "adjudication": "Follows the capacity difference above and confirms it independently. The model's all-online secondary flow is 2167 L/min (572 GPM) at Max-Q; scaled to Max-P over six active units it is about 3600 L/min (950 GPM), within 4 percent of the published nominal. The flow and the capacity disagree by the same ratio, which is what a consistent model should do." },
+
+    { "id": "cdu_connection_in", "quantity": "pipe.tcs_cdu.nominal_in", "published": 6, "unit": "in",
+      "tolerance": 0,
+      "evidence": "MCDU-70 primary and secondary connections 6 inch, top entry.",
+      "adjudication": "VELOCITY CRITERION FINDING, not an arithmetic error. At the published 991 GPM a 6 inch stainless Sch10 bore (161.5 mm ID) runs at 3.05 m/s, above this project's 2.7 m/s TCS header cap, so the generator rounds up to 8 inch. Either the 2.7 m/s cap is conservative for a short equipment nozzle, or the vendor connection is sized tighter than the distribution criterion and needs a transition at the unit. This is exactly the question the velocity cap exists to raise; it cannot be settled from the selection table alone." }
+  ],
+
+  "not_published": [
+    { "quantity": "pressure drop curve",
+      "note": "The table gives the head the unit delivers, not its internal loss on either side. cdu_design_dp_kPa stays a declared project input, and it is still about a quarter of the modelled circuit budget." },
+    { "quantity": "approach temperature per model",
+      "note": "RD113_4.2 states 4 C for the MCDU-70; the selection table does not carry approach at all. The preset uses 5 K, from RD113's own 45 C TCS against 40 C FWS." },
+    { "quantity": "turndown and valve data",
+      "note": "No minimum controlled flow, rangeability or authority figures, so the valve operating range still cannot be checked against anything." }
+  ]
+}

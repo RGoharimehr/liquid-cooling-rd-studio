@@ -11,7 +11,7 @@
     "basis": "Published reference-design documents supplied by the user. The PDFs are not bundled; every figure is traceable through the SHA-256 in the extraction and the document and page recorded on each row."
   },
   "status": "R1 supersedes the R0 datasheet. Design temperatures are not restated in this set and are carried from R0.",
-  "config": { "preset": "rd113", "overrides": { "sizing_mode": "preliminary" } },
+  "config": { "preset": "rd113", "overrides": {} },
 
   "expected": [
     { "id": "ai_racks",        "quantity": "count.compute_rack", "published": 64, "unit": "racks", "tolerance": 0,
@@ -44,7 +44,7 @@
 
     { "id": "cdu_capacity_kW", "quantity": "duty.CDU-01.heat_kW", "published": 2500, "unit": "kW", "tolerance": 0.02,
       "evidence": "4.2 R1, Motivair MCDU-70 nameplate 2.5 MW at 4 degC approach. 3.2 R1 basis note: CDU flow rate is sized on all TCS racks at Max-P (227 kW).",
-      "adjudication": "Different redundancy allocation, not a calculation error. RD113 sizes on six of eight CDUs active across the whole TCS loop: 64 racks at 227 kW x 0.96 plus the 8 liquid CIN racks is about 14.3 MW over 6 units = 2.38 MW, inside the 2.5 MW nameplate. This generator treats the two pods as independent and takes the worst case where both requested outages fall in the same pod, leaving 2 of 4 units to carry that pod: 2.89 MW. The generator's figure is the stricter one. Resolve by confirming whether RD113 permits load transfer between pods, or whether the outage requirement is per pod rather than global." },
+      "adjudication": "Two differences compound, and the Motivair selection table separates them - see references/benchmarks/motivair_mcdu70_in_rd113.json. Operating state: RD113 sizes the CDU on Max-P (227 kW) while this preset carries Max-Q (188 kW). Redundancy: RD113 allocates across six of eight units on one TCS loop, about 2.4 MW each, which the 2.5 MW rating covers; this generator treats the two pods as independent and takes the worst case where both requested outages fall in the same pod, leaving two of four to carry it. The generator's figure is the stricter one. Resolve by confirming whether RD113 permits load transfer between pods, or whether the outage requirement is per pod rather than global." },
 
     { "id": "chiller_duty_kW", "quantity": "duty.CHILLER-01.heat_kW", "published": 2223, "unit": "kW", "tolerance": 0.05,
       "evidence": "3.3, Uniflair XCAF2524G 2223 kW Dallas, 2 units N+1, serving the fan walls only",
@@ -58,8 +58,8 @@
       "note": "3.3 states CWP are 'to be sized upon design implementation'. No duty point, so nothing here validates the head calculation." },
     { "quantity": "valve schedule",
       "note": "3.2 gives tags and topology but no Kv, Cv, allocated pressure drop or operating range for any ISV, PCV or BAV. The required-Kv result stays unchecked." },
-    { "quantity": "CDU pressure drop and flow",
-      "note": "No primary or secondary flow rate and no dp curve for the MCDU-70, so cdu_design_dp_kPa remains a declared project input." },
+    { "quantity": "CDU pressure drop",
+      "note": "The Motivair selection table has since supplied the MCDU-70 flow rates, connection size and available head, so those are now checked. It publishes no pressure-drop curve, so cdu_design_dp_kPa remains a declared project input." },
     { "quantity": "physical layout",
       "note": "RD113_3.2 states it depicts system connections and is NOT representative of physical layout. The layout drawing is RD113_1.1X, which was not supplied, so routed lengths and clearances stay unchecked." }
   ],

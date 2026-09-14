@@ -103,6 +103,10 @@ def verify_evidence(docs, meta):
 # pitch, row length and 2 MW / 500 GPM reference CDU are that module's numbers,
 # not universal requirements, so they can only fail a design that selected it.
 DESCHUTES = 'OCP-Specification-Deschutes_v1_0'
+# These checks fall back to a Deschutes reference figure only while the project
+# has not supplied its own limit. Once it has, the check is measuring against
+# the equipment actually selected and the profile gate must not soften it.
+PROJECT_LIMIT_CHECKS = {'tcs_loop_within_available_dp': 'cdu_available_head_kPa'}
 
 
 def verify_model(graph, config, profile):
@@ -119,7 +123,8 @@ def verify_model(graph, config, profile):
                             'actual': None, 'expected': None, 'detail': f'{type(exc).__name__}: {exc}'})
             continue
         status = 'NOT_EVALUABLE' if ok is None else ('PASS' if ok else 'FAIL')
-        if status == 'FAIL' and d.document == DESCHUTES and selected != 'deschutes_module':
+        supplied = getattr(config, PROJECT_LIMIT_CHECKS.get(d.check, ''), 0) or 0
+        if status == 'FAIL' and d.document == DESCHUTES and selected != 'deschutes_module' and not supplied:
             status = 'NOT_APPLICABLE'
             detail = (str(detail) + f'. Measured against the Deschutes module reference, which does not '
                       f'govern this design: standards_profile is {selected!r}. Select the Deschutes '

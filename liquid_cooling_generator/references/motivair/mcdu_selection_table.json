@@ -1,0 +1,44 @@
+{
+  "manufacturer": "Motivair",
+  "product_family": "MCDU liquid-to-liquid coolant distribution units",
+  "source": {
+    "document": "Motivair MCDU model selection table",
+    "supplied_as": "Screenshot of the selection table supplied by the user. No PDF was provided, so no file hash is recorded and the figures cannot be traced to a page. Confirm against the controlled datasheet before using any of this in a specification.",
+    "revision": "unstated"
+  },
+  "footnotes_as_printed": [
+    "1. Capacities are rated with 100% Water - Capacities will vary depending on application.",
+    "2. Consult factory for custom fluids.",
+    "3. Consult factory for optional connection types."
+  ],
+  "conflict": "Footnote 1 says capacities are rated with 100% water, while the capacity rows are labelled 25% PG on the secondary. The two cannot both be literally true; the row labels are used here because they carry the temperatures.",
+  "models": {
+    "MCDU-70": {
+      "rated_capacity_kW": {
+        "primary_90F_secondary_PG25_113F_149F": 5040,
+        "primary_105.8F_secondary_PG25_113F": 2500,
+        "primary_90F_secondary_PG25_112F_122F": 1400,
+        "primary_45F_secondary_60F_84F": 3478
+      },
+      "nominal_primary_flow_GPM": 1025,
+      "nominal_secondary_flow_GPM": 991,
+      "connections_in": 6,
+      "connection_location": "Top",
+      "nominal_available_pump_head_psi": 38,
+      "pumps": 2,
+      "variable_speed_drives": true,
+      "dimensions_in": { "height": 90.00, "length": 48.13, "width": 63.00 },
+      "coolant_fluids": ["Water", "Glycol"]
+    }
+  },
+  "derived_checks": {
+    "capacity_scales_with_secondary_rise_at_fixed_flow": "113F/149F is a 20 K rise and gives 5040 kW; 112F/122F is 5.56 K and gives 1400 kW. 2500 kW x 20/10 = 5000 and 2500 x 5.56/10 = 1389, so the table is self-consistent with a nominal 10 K rise on the 2500 kW row.",
+    "nominal_flow_reproduces_the_rating": "991 GPM is 0.06252 m3/s. At 2500 kW with PG25 near 50 C (rho about 1020, cp about 3900) the implied rise is 10.05 K, which is RD113's published 45 to 55 C.",
+    "rating_condition_matches_rd113": "The 2500 kW row is primary 105.8 F (41.0 C) with secondary 25% PG at 113 F (45.0 C). RD113 publishes FWS 40 C supply and TCS 45 C supply, so the 2.5 MW figure in RD113_4.2 is the rating at this design's own temperatures, not a generic headline."
+  },
+  "not_published": [
+    "Pressure drop curve for either side; the available pump head is the head the unit delivers, not its internal loss, so cdu_design_dp_kPa remains a declared project input.",
+    "Approach temperature per model. RD113_4.2 states 4 C for the MCDU-70; this table does not.",
+    "Turndown, minimum controlled flow or valve authority data."
+  ]
+}

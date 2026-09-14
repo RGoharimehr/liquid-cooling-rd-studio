@@ -261,3 +261,63 @@ So this set validates the thermal, flow, count and topology half of the chain.
 Bore selection, reducers, Darcy loss, pump head and required Kv remain checked
 only for internal consistency by `validate_design.py`.
 
+### Motivair MCDU-70: the first external check on pipe size and pump head
+
+The Motivair MCDU selection table was supplied as a screenshot, so it carries no
+file hash and its figures cannot be traced to a page — recorded as such in
+`references/motivair/mcdu_selection_table.json`. It is nonetheless the first
+source in this repository that publishes a **flow rate, a connection size and an
+available pump head**, which is what steps 3 and 6 of the sizing chain needed.
+
+It also triangulates cleanly, which is worth stating because it means the table,
+RD113 and the generator are all describing the same machine:
+
+- The 2500 kW row is rated at primary 105.8 °F (41.0 °C) with secondary 25 % PG
+  at 113 °F (45.0 °C). RD113 publishes FWS 40 °C and TCS 45 °C, so the 2.5 MW in
+  RD113_4.2 is the rating at **this design's own temperatures**, not a headline.
+- The nominal 991 GPM secondary flow reproduces 2500 kW at a **10.05 K** rise —
+  RD113's published 45→55 °C.
+- The capacity rows scale linearly with secondary rise at that fixed flow:
+  20 K gives 5040 kW, 5.56 K gives 1400 kW, against 5000 and 1389 predicted.
+
+| Check | Published | Model | |
+| --- | --- | --- | --- |
+| TCS circuit head | ≤ 262 kPa (38 psi available) | **246.7 kPa** | passes, 5.9 % margin |
+| CDU connection | 6 in | 8 in | adjudicated, see below |
+| CDU capacity, all online | 2500 kW | 1444 kW | adjudicated |
+| Secondary flow, all online | 3750 L/min (991 GPM) | 2167 L/min | adjudicated |
+
+**The head check is the significant one.** An independently computed
+Darcy–Weisbach path loss plus declared K values and equipment allocations lands
+at 246.7 kPa against the 262 kPa the selected unit actually offers. That is the
+first time anything downstream of pipe sizing has been checked against a real
+product rather than against itself. The margin is 5.9 %, which is tight enough
+to be worth knowing.
+
+The capacity and flow differences are the same difference seen twice, which is
+what a consistent model should do: the preset carries Max-Q (188 kW) while RD113
+sizes the CDU on Max-P (227 kW) across six of eight active units. Scaled to that
+state the model gives about 950 GPM against the published 991.
+
+**The connection size is a genuine criterion finding.** At the published 991 GPM
+a 6 in stainless Sch10 bore runs at **3.05 m/s**, above this project's 2.7 m/s
+TCS header cap, so the generator rounds up to 8 in. Either the cap is
+conservative for a short equipment nozzle, or the vendor connection is tighter
+than the distribution criterion and needs a transition at the unit. The
+selection table cannot settle it — but this is precisely the question a velocity
+cap exists to raise, and nothing had raised it before.
+
+### Two consequences for the engine
+
+`cdu_available_head_kPa` is a new project input: the head the selected CDU offers
+to the technology-cooling loop. `tcs_loop_within_available_dp` now checks the
+circuit against it instead of the Deschutes reference unit's 80–90 psi, and the
+standards-profile gate steps aside once a project limit is supplied, because the
+check is then measuring against the equipment actually selected. The RD113 preset
+carries 262 kPa and the check passes at 36.9 psi against 38 psi available.
+
+The RD113 preset also moves to `preliminary` sizing. Left on the shipped manual
+default it carried the generic bores — a 10 in FWS main at **6.08 m/s** and 1382
+velocity exceedances across the design, because those defaults belong to a 4 MW
+hall and RD113 is an 11.5 MW one.
+
