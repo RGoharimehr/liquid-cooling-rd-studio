@@ -64,13 +64,21 @@ jobs:
         run: npm ci --no-audit --no-fund
         working-directory: rd-studio
 
-      # The browser runs a copy of the engine. Re-syncing and finding a diff
-      # means the committed copy is stale, so the studio would run different
-      # code from the CLI.
+      # The browser runs a copy of the engine. Re-syncing and finding a diff in
+      # the engine sources means the committed copy is stale, so the studio
+      # would run different code from the CLI.
+      #
+      # Scoped to the sources and the parameter catalogue on purpose. The same
+      # step also regenerates public/initial-graph.json, and that artifact is
+      # not reproducible across CPython versions: 3.12 sums floats with
+      # compensated summation, so a routed pipe total serialises as 450.4136
+      # there and 450.4135999999993 on 3.11. A difference of 7e-13 m is not a
+      # staleness signal, and gating on it would fail whenever a contributor's
+      # interpreter differed from the runner's.
       - name: Browser engine copy is current
         run: |
           python3 rd-studio/scripts/sync-engine.py
-          git diff --exit-code -- rd-studio/public || {
+          git diff --exit-code -- rd-studio/public/engine rd-studio/public/catalog.json || {
             echo '::error::The committed browser engine copy is stale. Run rd-studio/scripts/sync-engine.py and commit the result.'
             exit 1
           }
