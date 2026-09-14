@@ -39,6 +39,14 @@ else:
 for p in (engine/'revit').rglob('*'):
     if p.is_file() and not any(x in p.parts for x in ('bin','obj')):
         rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(str(rel))
+# The manifest is the only list the browser worker has. A sync that quietly
+# produced a short one is how a deployed studio ends up raising
+# ModuleNotFoundError for an engine module that is present in the repository.
+REQUIRED={'web_api.py','pipeline.py','model.py','verify.py','headless_selection.py',
+          'datacenter_equipment_finder/__init__.py'}
+absent=sorted(REQUIRED-set(names))
+if absent:raise SystemExit('sync-engine: the browser manifest is missing '+', '.join(absent)+
+                           '. Check the engine sources before deploying.')
 (public/'engine/manifest.json').write_text(json.dumps(sorted(names)))
 (public/'initial-graph.json').write_text(json.dumps(g,separators=(',',':')))
 print('Synced',len(names),'engine files; initial',len(g['components']),'objects;',g['metadata']['verification'])

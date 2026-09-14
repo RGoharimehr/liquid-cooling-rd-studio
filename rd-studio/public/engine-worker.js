@@ -8,12 +8,18 @@ async function checked(url, json = false) {
   if (!response.ok) throw new Error(`Engine asset failed to load (${response.status}): ${url}. Retry or reload the page.`);
   return json ? response.json() : response.text();
 }
+// Every module the worker enters the engine through. Importing them once here
+// reaches the whole tree, so a deployment that uploads the page but drops part of
+// /engine fails now, with the deployment named, instead of surfacing a bare Python
+// ModuleNotFoundError inside whichever panel first reached for the missing module.
+const ENGINE_ENTRY_POINTS = 'web_api, headless_selection, datacenter_equipment_finder, zone_editing, design_actions';
 function initialize(requestId) {
   if (!runtimePromise) runtimePromise = (async () => {
     self.postMessage({type: 'status', requestId, message: 'Loading the design engine…'});
     const {loadPyodide} = await import('/pyodide/pyodide.mjs');
     const runtime = await loadPyodide({indexURL: '/pyodide/'});
     const manifest = await checked('/engine/manifest.json', true);
+    if (!Array.isArray(manifest)) throw new Error('/engine/manifest.json did not return the engine file list. This deployment is serving something else at that address.');
     runtime.FS.mkdirTree('/engine');
     await Promise.all(manifest.map(async name => {
       const contents = await checked('/engine/' + name);
@@ -22,6 +28,12 @@ function initialize(requestId) {
       runtime.FS.writeFile(path, contents);
     }));
     runtime.runPython("import sys; sys.path.insert(0, '/engine')");
+    try {
+      runtime.runPython('import ' + ENGINE_ENTRY_POINTS);
+    } catch (error) {
+      const detail = String(error.message || error).trim().split('\n').at(-1);
+      throw new Error(`This deployment is serving an incomplete design engine (${detail}). Redeploy the studio after running rd-studio/scripts/sync-engine.py.`);
+    }
     return runtime;
   })().catch(error => { runtimePromise = undefined; throw error; });
   return runtimePromise;
