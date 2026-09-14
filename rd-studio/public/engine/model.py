@@ -206,6 +206,9 @@ class Config:
         version = values.pop('schema_version', 1)
         if version not in (1, 2): raise ValueError('Unsupported parameter schema version')
         if version == 1: values.setdefault('plant_type', 'boundary')
+        # The retired heat-balance mode produced a design with no pressure,
+        # pump or valve results at all. Migrate it rather than rebuilding one.
+        if values.get('sizing_mode') == 'heat_balance': values['sizing_mode'] = 'preliminary'
         return cls(schema_version=2, **values)
 
     def validate(self):
@@ -265,7 +268,8 @@ class Config:
         if self.layout_style not in ('side_gallery','central_network','split_banks'): raise ValueError('Unknown layout style')
         if self.return_topology not in ('direct_return','reverse_return'): raise ValueError('Unknown return topology')
         if self.cdu_placement not in ('end_gallery','central_gallery','custom'): raise ValueError('Unknown CDU placement')
-        if self.sizing_mode not in ('manual','heat_balance','preliminary'): raise ValueError('Select manual or preliminary sizing')
+        if self.sizing_mode == 'heat_balance': raise ValueError("The heat_balance sizing mode is retired because it produced no pressure, pump or valve results; use 'preliminary' (Config.from_dict migrates it automatically)")
+        if self.sizing_mode not in ('manual','preliminary'): raise ValueError('Select manual or preliminary sizing')
         if self.standards_profile not in ('project','deschutes_module','rd113_r0'): raise ValueError('Unknown standards profile')
         if self.pod_elevation_spacing_m<=0:raise ValueError('Pod elevation spacing must be positive')
         if self.flow_input_mode not in ('lpm_per_kw','heat_balance'):raise ValueError('Unknown flow input basis')
@@ -295,13 +299,6 @@ class Config:
         if not 0<self.header_half_separation_m or self.return_elevation_offset_m<0: raise ValueError('Supply/return separation must be positive')
         if not 0<self.liquid_fraction<=1 or not 0<=self.pg_volume_fraction<1: raise ValueError('Invalid liquid or glycol fraction')
         if not .04<=self.fitting_arm_m<=.24 or not .04<=self.bend_radius_m<=.35: raise ValueError('Reference fitting envelopes support 0.04–0.24 m arms and 0.04–0.35 m bends; check diagnostics')
-        if self.sizing_mode=='heat_balance': self.validate_sizing()
-
-    def validate_sizing(self):
-        if abs(self.pg_volume_fraction-.25)>1e-9 or abs(self.tcs_supply_C+self.tcs_delta_K/2-36)>1e-9:
-            raise ValueError('Heat-balance sizing supports verified PG25 properties at 36 C mean; use manual geometry sizing for other operating points')
-        if abs(self.fws_supply_C-27)>1e-9 or abs(self.fws_delta_K-10)>1e-9:
-            raise ValueError('Heat-balance sizing supports FWS 27/37 C; use manual geometry sizing for other operating points')
 
 
 @dataclass

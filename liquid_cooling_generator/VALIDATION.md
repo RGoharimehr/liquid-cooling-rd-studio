@@ -94,3 +94,38 @@ What it does **not** do: it takes velocity caps, fitting K values, equipment
 pressure allocations, fluid properties and efficiencies as declared project
 assumptions and only checks that the engine applied them consistently. It does
 not balance the network, intersect a pump curve, or certify anything.
+
+## Engine defect fixes — branch `claude/engine-defect-fixes`
+
+Eight defects found by the independent harness and by reading the calculation
+path. All eight are closed; the full suite (104 tests, 15 subtests) still passes,
+and `validate_design.py` reports 82 of 82 checks passing on every preset.
+
+| # | Defect | Fix | Measured effect |
+| --- | --- | --- | --- |
+| F1 | A reducer's K was referenced to the smallest bore on **any** edge touching its nodes — at a branch takeoff, a perpendicular leg from a different pipe family. Trunk flow through a branch bore gave 48.5 m/s. | The candidate bores are now restricted to neighbours carrying the same design flow, so a coefficient can only reference a bore its own flow passes through. A reference velocity above twice the family limit is reported as `K_REFERENCE_IMPLAUSIBLE` instead of being produced silently. The neighbour scan is indexed by node, removing a quadratic pass. | `FWS-MAIN-R-002` 176.4 kPa → 0.32 kPa. FWS pump head 45.35 m → 24.66 m; TCS 23.62 m → 21.76 m. |
+| F2 | `graph["hydraulics"]["heat_and_flow"]` used hard-coded PG25 properties and always assumed heat balance, ignoring `flow_input_mode` and the entered fluid properties. At `flow_lpm_per_kw = 2.0` it reported 4 988.7 L/min while the pipes were sized for 8 025.6. | `heat_flows` now derives flow from the configuration's own properties and selected basis, and records `tcs_flow_basis` and `implied_tcs_delta_K`. | The two blocks agree to 1e-12 on every preset, and a regression test in `test_pipeline.py` pins them together. |
+| F3 | `verify.py` defined `run()` twice; the second shadowed the first, so the decision register, its model checks and its coverage audit never ran, and the evidence tally was collapsed to one count. | One `run()` reporting two layers that are never conflated: the G-series acceptance checks that gate export, and the DEC-series design register reported for review. Register checks measured against the OCP Deschutes module are `NOT_APPLICABLE` unless that profile is selected. | 48 decisions now evaluate: 23 PASS, 8 NOT_APPLICABLE, 4 NOT_EVALUABLE, 0 FAIL, 0 ERROR. Evidence reports 40 FOUND, 0 NOT_FOUND. |
+| F3a | `tcs_loop_within_available_dp` read `hydraulics["scenarios"]`, which no live path writes, and raised `KeyError`. The design had no loop-pressure acceptance check anywhere. | Reads the preliminary pump screens. | Restored: 32.2 psi measured against 80 psi available. |
+| F3b | `parallel_cdus_on_common_header` looked for a scenario literally named `all_three_online`; the engine emits `all_online`. | Matches on the scenario's `kind`. | Passes for any CDU count. |
+| F3c | `cdu_has_expansion_tank` / `cdu_has_air_separator` counted standalone components only, while the generator declares those provisions inside the CDU assembly. | Counts standalone units plus CDUs declaring the function. | Passes; the declared provision is visible in the measured value. |
+| F3d | `seismic_braces_present` failed whenever bracing was switched off. | `NOT_EVALUABLE` when `include_seismic_braces` is false. | A configuration choice is no longer reported as a violation. |
+| F4 | `BOM.csv` read `edge["dp_Pa"]` and `edge["K"]`; the live path writes `preliminary_dp_Pa`, and `apply_sizes` zeroes `K` before the coefficients are chosen. Every row exported zero. | The pipeline writes the applied `K`, `K_reference_id_m`, friction factor and regime back onto the edge; the emitter reads `preliminary_dp_Pa`. | 532 edges carry their real coefficient; no priced component exports a zero drop. The harness now builds the actual BOM row rather than guessing the key. |
+| F5 | The route optimiser's advertised pump-energy term summed `straight_dp_Pa + fitting_dp_Pa`, fields only the retired path wrote, so it was always exactly zero. | Reads `preliminary_dp_Pa`, and the basis string states that the flows are per-family envelopes, making the term an upper bound useful for comparing two routes of the same design. | 0 W → 115.8 kW dissipation, 715 853 NPV on the compact water-cooled preset. |
+| F6 | `cws_static_lift_m` defaults to `0.0` and the guard tested `is None`, so an open tower circuit with no lift reported a complete duty. | Zero is treated as unassigned on an open circuit. | CWS pumps report `INCOMPLETE_LOWER_BOUND` until a lift and nozzle pressure are entered. |
+| F7 | `sizing_mode="heat_balance"` was reachable from the CLI and JSON import and built a design with no pressure, pump or valve results at all. | Rejected at validation with a message naming the replacement; `Config.from_dict` migrates existing files to `preliminary`. | The mode cannot produce a stripped design any more. |
+| F8 | `report.py` was unreachable and raised `KeyError` if called. `hydraulics.analyze / size_graph / longest_path / loss / friction / FLUIDS / scenario_flow`, `topology.generate / Builder.route / racks / rack / distribution / collectors / cdu_assembly / cdu / collector` were all dead — and were the reason F2, F4 and F5 read fields the live path had stopped writing. | Deleted. `sync-engine.py` now also removes browser copies of engine modules that no longer exist upstream, and warns instead of failing when `node_modules` is absent. | `hydraulics.py` 241 → 102 lines; one implementation per question. |
+
+### Knowing what to validate
+
+`validate_design.py --design-space` inventories the configurable choices by
+studio section: 2 204 496 combinations of the choice lists, 144 473 849 856 once
+the installation and routing toggles are counted, with every numeric input
+moving continuously on top of that.
+
+Five of those axes change geometry or the calculation path rather than moving a
+number — `layout_style`, `return_topology`, `cdu_placement`, `plant_type` and
+`sizing_mode` — which is 108 distinct designs. `validate_design.py --matrix`
+builds and checks all of them. The remaining axes move numbers the checks
+already re-derive from first principles, so a passing matrix plus the
+first-principles checks covers the space without enumerating it.

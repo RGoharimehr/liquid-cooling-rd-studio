@@ -142,7 +142,10 @@ def evaluate(g: dict, rates: Rates | None = None, *,
             if kind == 'tee':
                 bucket['tees'] += 1
         for e in edges_by_comp[comp['id']]:
-            dp = (e.get('straight_dp_Pa') or 0.) + (e.get('fitting_dp_Pa') or 0.)
+            # preliminary_sizing owns the routed loss. The retired hydraulics
+            # path wrote straight_dp_Pa/fitting_dp_Pa and no longer runs, which
+            # silently zeroed this whole term.
+            dp = e.get('preliminary_dp_Pa') or 0.
             q = e.get('design_flow_m3_s') or 0.
             bucket['energy_W'] += dp * q / max(rates.pump_efficiency, 1e-6)
 
@@ -176,8 +179,11 @@ def evaluate(g: dict, rates: Rates | None = None, *,
         'total': total,
         'pairing': pairing,
         'basis': ('Priced terms use graph lengths, bores and Darcy-Weisbach drops '
-                  'already computed by the generator. Energy is zero in manual '
-                  'sizing mode because no flow is assigned.'),
+                  'already computed by the generator. Dissipation is the sum of '
+                  'dp x flow over the priced transport edges, evaluated at each '
+                  'edge design envelope rather than at one simultaneous operating '
+                  'condition, so the energy term is an upper bound and is useful '
+                  'for comparing two routes of the same design, not as an absolute.'),
     }
 
 

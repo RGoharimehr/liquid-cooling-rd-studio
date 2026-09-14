@@ -106,7 +106,7 @@ def _component_row(component: dict, edges: list[dict]) -> dict:
         "internal_hydraulic_length_m": sum(float(e.get("length_m", 0)) for e in edges),
         "flow_m3_s": _maximum_port_flow(edges),
         "design_flow_m3_s": max((abs(float(e.get("design_flow_m3_s", 0))) for e in edges), default=0),
-        "dp_Pa": max((float(e.get("dp_Pa", 0)) for e in edges), default=0),
+        "dp_Pa": max((float(e.get("preliminary_dp_Pa") or 0) for e in edges), default=0),
         "K": "; ".join(f"{float(e['K']):g}" for e in edges if e.get("K") is not None),
         "K_reference_id_m": "; ".join(f"{float(e['K_reference_id_m']):g}" for e in edges if e.get("K_reference_id_m") is not None),
         "hydraulic_result_basis": "; ".join(sorted({str(e.get("hydraulic_result_basis", "design_flow_m3_s")) for e in edges})),
@@ -114,7 +114,7 @@ def _component_row(component: dict, edges: list[dict]) -> dict:
         "installation_attachment": bool(component.get("attachment")),
         "hydraulic_element": not component.get("attachment", False),
         "host_component": component.get("host_component", ""),
-        "notes": "Physical item count; flow_m3_s is maximum port flow in all-online operation; design_flow_m3_s and dp_Pa are maximum internal-edge values, not sums of independent scenario maxima. " + str(component.get("notes", "")),
+        "notes": "Physical item count; flow_m3_s is maximum port flow in all-online operation; design_flow_m3_s and dp_Pa are maximum internal-edge values from the preliminary screen, not sums of independent scenario maxima, and not a balanced network solution. " + str(component.get("notes", "")),
     }
 
 

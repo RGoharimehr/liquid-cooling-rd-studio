@@ -429,6 +429,12 @@ def evaluate(graph, config, *, use_applied_sizes=False):
         family = families.get(result.get('size_family'))
         if family and family['selection']:
             result['selected_size'] = dict(family['selection'])
+    # Index neighbours once. The reducer lookup below used to rescan every
+    # estimate for every reducer, which is quadratic in the edge count.
+    edges_at_node = defaultdict(list)
+    for edge in edges:
+        edges_at_node[edge['from_node']].append(edge['id'])
+        edges_at_node[edge['to_node']].append(edge['id'])
     valves = []
     for eid, result in estimates.items():
         if result['status'] == 'NOT_EVALUABLE':
@@ -454,12 +460,29 @@ def evaluate(graph, config, *, use_applied_sizes=False):
             k = 0.  # An allocated valve/equipment dp is not counted twice as K.
         reference_diameter = diameter
         if kind == 'reducer':
-            connected = [r['selected_size']['id_m'] for other, r in estimates.items()
-                         if other != eid and r.get('selected_size') and
-                         {edge['from_node'], edge['to_node']} & {edge_by_id[other]['from_node'], edge_by_id[other]['to_node']}]
+            # A loss coefficient is only meaningful on a bore this component's
+            # own flow passes through. Every edge touching a reducer's nodes is
+            # not a candidate: a branch takeoff puts a perpendicular leg from a
+            # different pipe family on the same node, and pairing that bore with
+            # the trunk flow gives a velocity no pipe in the model carries.
+            tolerance = 1e-9 + 1e-6 * flow
+            connected = [estimates[other]['selected_size']['id_m']
+                         for node in (edge['from_node'], edge['to_node'])
+                         for other in edges_at_node[node]
+                         if other != eid and estimates.get(other, {}).get('selected_size')
+                         and abs((estimates[other].get('design_flow_m3_s') or 0.) - flow) <= tolerance]
             reference_diameter = min([diameter] + connected)
         k_velocity = flow / (pi * reference_diameter ** 2 / 4)
         fitting = k * fluid['rho_kg_m3'] * k_velocity ** 2 / 2
+        if k and k_velocity > 2 * family['velocity_cap_m_s']:
+            # Kept as an explicit finding rather than a silent number: a
+            # reference velocity this far above the criterion means the flow and
+            # the bore came from different pipe families.
+            pending.append({'code': 'K_REFERENCE_IMPLAUSIBLE', 'edge_id': eid,
+                'component_id': edge['component_id'], 'family': family['family'],
+                'detail': f'{kind} K is referenced to a {reference_diameter * 1000:.1f} mm bore at '
+                          f'{flow * 60000:,.0f} L/min, giving {k_velocity:.1f} m/s against a '
+                          f'{family["velocity_cap_m_s"]:g} m/s criterion. Review the connected pipe families.'})
         if kind not in {'pipe', 'pump', 'cooling_tower'} | set(k_values) | set(allocations):
             pending.append({'edge_id': eid, 'reason': 'No declared loss assumption for component kind ' + kind})
             result.update(status='NOT_EVALUABLE', total_dp_Pa=None); continue
@@ -498,13 +521,20 @@ def evaluate(graph, config, *, use_applied_sizes=False):
                 if service == 'CWS':
                     lift = _get(config, 'cws_static_lift_m', _get(config, 'tower_static_lift_m', None))
                     nozzle = _get(config, 'tower_nozzle_dp_kPa', None)
-                    if lift is None or nozzle is None:
-                        static_status = 'OPEN tower loop: basin-to-discharge static lift and nozzle pressure are unassigned; reported head/power are friction-only lower-bound screens'
+                    for value in (lift, nozzle):
+                        if value is not None and (type(value) not in (int, float) or not isfinite(value) or value < 0):
+                            raise ValueError('Tower static lift and nozzle pressure must be finite and nonnegative')
+                    static_dp = fluid['rho_kg_m3'] * G * (lift or 0.) + (nozzle or 0.) * 1000.
+                    # An open circuit lifts water from the basin to the
+                    # distribution deck. Zero is a placeholder, not a resolved
+                    # requirement, so it cannot complete a tower pump duty.
+                    missing = [name for value, name in ((lift, 'basin-to-discharge static lift'),
+                                                        (nozzle, 'nozzle pressure')) if not value]
+                    if missing:
+                        static_status = ('OPEN tower loop: ' + ' and '.join(missing) + ' is zero or unassigned. '
+                                         'Reported head and power are friction-only lower-bound screens, not a tower pump duty.')
                         complete = False
                     else:
-                        if type(lift) not in (int, float) or type(nozzle) not in (int, float) or not isfinite(lift) or not isfinite(nozzle) or lift < 0 or nozzle < 0:
-                            raise ValueError('Tower static lift and nozzle pressure must be finite and nonnegative')
-                        static_dp = fluid['rho_kg_m3'] * G * lift + nozzle * 1000.
                         static_status = 'Open tower circuit; user-entered basin-to-discharge lift and nozzle pressure included'
                     if cop is None:
                         complete = False

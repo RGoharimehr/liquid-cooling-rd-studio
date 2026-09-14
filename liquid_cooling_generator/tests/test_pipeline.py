@@ -5,12 +5,11 @@ import sys,json,math,csv,tempfile,unittest,subprocess
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from model import Config,build_profile
-from topology import generate,route_graph
+from topology import route_graph
 from sizing import apply_sizes
 from pipeline import build,run
 from parameters import PRESETS,catalog
 from placement import place_installation,installation_diagnostics
-from hydraulics import scenario_flow
 
 class PipelineTests(unittest.TestCase):
     @classmethod
@@ -45,16 +44,25 @@ class PipelineTests(unittest.TestCase):
         self.assertLessEqual(max(map(len,owners.values())),2)
         for e in g['edges']:
             if e['kind']=='pipe':self.assertAlmostEqual(e['length_m'],math.dist(n[e['from_node']],n[e['to_node']]))
-    def test_general_redundancy_and_heat_balance_conservation(self):
+    def test_general_redundancy_and_prescribed_flow_conservation(self):
         for redundancy in (0,1,2):
-            c=replace(self.c,redundancy=redundancy,sizing_mode='heat_balance');g=generate(c);route_graph(g);apply_sizes(g,c)
+            c=replace(self.c,redundancy=redundancy,sizing_mode='preliminary');g,_=build(c)
             self.assertEqual(sum(s['kind']=='design' for s in g['scenarios']),math.comb(3,redundancy))
-            for s in g['scenarios']:
-                residual={n['id']:0 for n in g['nodes']}
-                for e in g['edges']:
-                    q=scenario_flow(e,s['active_cdus']);residual[e['from_node']]-=q;residual[e['to_node']]+=q
-                for n in (g['metadata']['fws_source'],g['metadata']['fws_sink']):residual.pop(n)
-                self.assertLess(max(map(abs,residual.values())),1e-9)
+            sizing=g['metadata']['preliminary_sizing']
+            self.assertFalse([x for x in sizing['unresolved'] if x.get('code')=='FLOW_ASSIGNMENT_UNRESOLVED'])
+            edges={e['id']:e for e in g['edges']}
+            residual={n['id']:0. for n in g['nodes']}
+            for item in sizing['edge_estimates']:
+                q=item.get('signed_all_online_flow_m3_s')
+                if q is None:continue
+                e=edges[item['edge_id']];residual[e['from_node']]-=q;residual[e['to_node']]+=q
+            for n in (g['metadata']['fws_source'],g['metadata']['fws_sink']):residual.pop(n)
+            self.assertLess(max(map(abs,residual.values())),1e-9)
+            # One design flow per circuit: the graph block and the sizing block
+            # are derived the same way and must not drift apart again.
+            flows=g['hydraulics']['heat_and_flow'];thermal=sizing['thermal_flows']
+            self.assertAlmostEqual(flows['tcs_total_m3_s'],thermal['TCS_m3_s'],places=12)
+            self.assertAlmostEqual(flows['fws_total_m3_s'],thermal['FWS_m3_s'],places=12)
     def test_topology_and_placement_knobs_change_geometry(self):
         base=self.g
         for changes in ({'layout_style':'central_network'},{'layout_style':'split_banks'},{'return_topology':'reverse_return'},{'cdu_placement':'custom','cdu_origin_x_m':-8.,'cdu_origin_y_m':-12.}):

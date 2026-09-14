@@ -277,8 +277,11 @@ def check_hydraulics(graph, report):
 
         if edge['kind'] in allocations and row['loss_K'] != 0:
             double_counted.append(row['edge_id'])
-        if edge['kind'] not in allocations and edge['kind'] not in k_by_kind and edge['kind'] != 'pipe' \
-                and row['total_dp_Pa'] == 0:
+        # A pump adds head and is excluded from its own path; an open cooling
+        # tower's nozzle requirement is carried once, in the circuit static term.
+        # Everything else that contributes zero is an undeclared loss.
+        if edge['kind'] not in allocations and edge['kind'] not in k_by_kind \
+                and edge['kind'] not in ('pipe', 'pump', 'cooling_tower') and row['total_dp_Pa'] == 0:
             unpriced.append(edge['kind'])
 
     for name, (error, eid) in sorted(worst.items()):
@@ -378,11 +381,13 @@ def check_paths_and_pumps(graph, report):
         margin = screen['head_margin_fraction']
         if screen['circuit_id'] == 'CWS':
             lift = graph['metadata']['config'].get('cws_static_lift_m')
-            report.add('pump', f"{screen['component_id']}: open tower circuit declares a static lift",
-                       bool(lift), lift, '> 0 m',
-                       'An open cooling-tower loop needs basin-to-distribution lift. Zero is '
-                       'indistinguishable from unassigned here, yet the screen still reports complete.',
-                       severity='warn')
+            # An open cooling-tower loop lifts water from the basin to the
+            # distribution deck. Without that lift the duty is a friction-only
+            # lower bound and must say so rather than reporting a complete screen.
+            report.add('pump', f"{screen['component_id']}: open tower duty without a declared lift is marked incomplete",
+                       bool(lift) or screen['status'] == 'INCOMPLETE_LOWER_BOUND',
+                       f"lift={lift} m, status={screen['status']}", 'lift > 0 or INCOMPLETE_LOWER_BOUND',
+                       'zero is a placeholder, not a resolved requirement')
         if screen['circuit_id'] != 'CWS':
             report.add('pump', f"{screen['component_id']}: closed loop adds no static elevation",
                        screen['static_dp_Pa'] == 0, screen['static_dp_Pa'], 0,
@@ -506,8 +511,7 @@ def check_artifact_agreement(graph, report):
                      legacy['total_heat_W'], flows['liquid_heat_W'], 1e-9, 'W')
 
     estimates = {e['edge_id']: e for e in sizing.get('edge_estimates', [])}
-    families = {f['family'] + ':' + str(f['material']): f for f in sizing.get('size_families', [])}
-    mismatched = []; zero_dp = 0; zero_k = 0; priced = 0
+    mismatched = []; zero_k = 0
     for edge in graph['edges']:
         row = estimates.get(edge['id'])
         if not row or not row.get('selected_size'):
@@ -515,23 +519,32 @@ def check_artifact_agreement(graph, report):
         for key in ('nominal_size_in', 'id_m', 'od_m'):
             if edge.get(key) is None or abs(edge[key] - row['selected_size'][key]) > 1e-8:
                 mismatched.append(edge['id']); break
-        if row.get('total_dp_Pa'):
-            priced += 1
-            if not edge.get('dp_Pa'):
-                zero_dp += 1
-        if row.get('loss_K'):
-            if not edge.get('K'):
-                zero_k += 1
+        if row.get('loss_K') and not edge.get('K'):
+            zero_k += 1
     report.add('agreement', 'applied edge bores match the calculated selection',
                not mismatched, mismatched[:3], [],
                f'{len(mismatched)} edges carry a bore the sizing did not choose')
-    report.add('agreement', 'edge dp_Pa (exported to BOM.csv) carries the calculated loss',
-               zero_dp == 0, f'{zero_dp}/{priced} priced edges report dp_Pa = 0',
-               '0 blank rows',
-               'BOM.csv reads edge["dp_Pa"]; the sizing writes preliminary_dp_Pa.')
-    report.add('agreement', 'edge K (exported to BOM.csv) carries the applied loss coefficient',
+    report.add('agreement', 'edge K carries the applied loss coefficient',
                zero_k == 0, f'{zero_k} edges report K = 0 despite a nonzero loss_K', '0 rows',
-               'sizing.apply_sizes sets edge["K"] = 0 after the coefficients are chosen.')
+               'apply_sizes zeroes K before the coefficients are chosen; the pipeline must put them back')
+
+    # Build the actual BOM rows rather than guessing which key the emitter reads.
+    try:
+        from emitters import _component_row, _edge_index
+    except ImportError:
+        return
+    index = _edge_index(graph)
+    blank = 0; priced = 0
+    for component in graph['components']:
+        own = index.get(component['id'], [])
+        if not any((estimates.get(e['id'], {}).get('total_dp_Pa') or 0) for e in own):
+            continue
+        priced += 1
+        if not float(_component_row(component, own)['dp_Pa'] or 0):
+            blank += 1
+    report.add('agreement', 'BOM.csv dp_Pa column carries the calculated loss',
+               blank == 0, f'{blank}/{priced} priced components export dp_Pa = 0', '0 blank rows',
+               'the emitted schedule must read the field the live sizing writes')
 
 
 def check_redundancy(graph, report):
@@ -652,12 +665,83 @@ def render(report, verbose=False):
     return '\n'.join(lines)
 
 
+# The choice lists that change geometry or the calculation path, as opposed to
+# the numeric inputs that only move a number. Every combination of these is a
+# distinct design the generator must produce and the checks above must pass on.
+MATRIX_AXES = ('layout_style', 'return_topology', 'cdu_placement', 'plant_type', 'sizing_mode')
+
+
+def design_space():
+    """Inventory the configurable design choices, grouped by studio section."""
+    from parameters import catalog
+    sections = {}
+    for field in catalog():
+        section = sections.setdefault(field['group'], {'inputs': 0, 'choices': [], 'toggles': 0,
+                                                       'numeric': 0, 'lists': 0})
+        section['inputs'] += 1
+        if field['type'] == 'select':
+            section['choices'].append((field['key'], list(field.get('options') or [])))
+        elif field['type'] == 'boolean':
+            section['toggles'] += 1
+        elif field['type'] == 'json':
+            section['lists'] += 1
+        else:
+            section['numeric'] += 1
+    for section in sections.values():
+        named = 1
+        for _, options in section['choices']:
+            named *= max(1, len(options))
+        section['named_variants'] = named
+        section['with_toggles'] = named * 2 ** section['toggles']
+    return sections
+
+
+def render_design_space(sections):
+    lines = ['== Configurable design space, by studio section ==',
+             f"  {'section':<20}{'inputs':>7}{'lists':>7}{'toggles':>8}{'numeric':>8}"
+             f"{'named':>8}{'x toggles':>12}"]
+    total_named = total_all = 1
+    for name, section in sorted(sections.items(), key=lambda kv: -kv[1]['named_variants']):
+        lines.append(f"  {name:<20}{section['inputs']:>7}{len(section['choices']):>7}"
+                     f"{section['toggles']:>8}{section['numeric']:>8}"
+                     f"{section['named_variants']:>8}{section['with_toggles']:>12,}")
+        for key, options in section['choices']:
+            lines.append(f"        {key:<32}{len(options)}  ·  " + ', '.join(map(str, options)))
+        total_named *= section['named_variants']
+        total_all *= section['with_toggles']
+    lines += ['',
+              f'  {total_named:,} combinations of the choice lists alone;',
+              f'  {total_all:,} once the install/routing toggles are included;',
+              '  and every numeric input moves continuously on top of that.',
+              '',
+              f"  --matrix validates the {len(MATRIX_AXES)} axes that change geometry or the",
+              '  calculation path: ' + ', '.join(MATRIX_AXES) + '.',
+              '  The rest move numbers the checks already re-derive from first principles.']
+    return '\n'.join(lines)
+
+
+def matrix_cases(values):
+    """Every combination of the geometry-shaping choice lists."""
+    from itertools import product
+    from parameters import OPTIONS
+    axes = [(axis, OPTIONS[axis]) for axis in MATRIX_AXES]
+    for combo in product(*(options for _, options in axes)):
+        overrides = dict(zip((axis for axis, _ in axes), combo))
+        label = ' · '.join(f'{v}' for v in combo)
+        yield label, {**values, **overrides}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--config', help='parameter JSON to build and validate')
     source.add_argument('--graph', help='an already emitted graph.json')
     source.add_argument('--all-presets', action='store_true', help='validate every bundled preset')
+    source.add_argument('--design-space', action='store_true',
+                        help='inventory the configurable design choices by studio section and exit')
+    parser.add_argument('--matrix', action='store_true',
+                        help='with --config or --all-presets: validate every combination of the '
+                             'geometry-shaping choice lists (slow; see --design-space)')
     parser.add_argument('--sizing-mode', choices=('manual', 'preliminary'),
                         help='override the sizing mode before building')
     parser.add_argument('--plant-type', choices=('boundary', 'air_cooled', 'water_cooled'))
@@ -669,6 +753,9 @@ def main(argv=None):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     reports = []
 
+    if args.design_space:
+        print(render_design_space(design_space()))
+        return 0
     if args.graph:
         graph = json.loads(Path(args.graph).read_text())
         reports.append(validate(graph, Report(args.graph)))
@@ -685,11 +772,24 @@ def main(argv=None):
                 values['sizing_mode'] = args.sizing_mode
             if args.plant_type:
                 values['plant_type'] = args.plant_type
-            graph, _ = build(Config.from_dict(values))
-            report = Report(f"{label} [{values.get('sizing_mode')}/{values.get('plant_type')}]")
-            reports.append(validate(graph, report, values, build, args.sweep))
+            variants = list(matrix_cases(values)) if args.matrix else [
+                (f"{values.get('sizing_mode')}/{values.get('plant_type')}", values)]
+            for variant, settings in variants:
+                report = Report(f'{label} [{variant}]')
+                try:
+                    graph, _ = build(Config.from_dict(dict(settings)))
+                except Exception as exc:
+                    report.add('build', 'the generator produces this design',
+                               False, f'{type(exc).__name__}: {exc}', 'a built graph')
+                    reports.append(report)
+                    continue
+                reports.append(validate(graph, report, settings, build, args.sweep))
 
     for report in reports:
+        if args.matrix and not report.failed and not args.verbose:
+            print(f'== {report.label} ==  {len(report.rows)} checks, all pass'
+                  + (f', {len(report.warned)} warnings' if report.warned else ''))
+            continue
         print(render(report, args.verbose))
     if args.json:
         Path(args.json).write_text(json.dumps(

@@ -70,6 +70,13 @@ def build(config):
             edge['preliminary_dp_Pa']=item.get('total_dp_Pa')
             edge['velocity_m_s']=item.get('velocity_m_s')
             edge['velocity_cap_pass']=item.get('velocity_cap_pass')
+            # apply_sizes zeroes these before the coefficients are chosen. Put
+            # the applied values back, or every consumer of the graph - the BOM,
+            # the cost model, the Flownex mapping - reads a loss of zero.
+            edge['K']=item.get('loss_K',0.) or 0.
+            edge['K_reference_id_m']=item.get('K_reference_id_m')
+            edge['flow_regime']=item.get('flow_regime')
+            edge['friction_factor']=item.get('friction_factor')
             edge['hydraulic_result_basis']='Prescribed flow and preliminary Darcy-Weisbach estimate; network not balanced'
             edge['provenance']['flow']=edge['hydraulic_result_basis']
         g['hydraulics'].update(mode=config.sizing_mode,flow_assignment='prescribed; see preliminary_sizing',network_pressure_solve_performed=False,

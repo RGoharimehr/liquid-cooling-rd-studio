@@ -67,6 +67,18 @@ def _count(g, kind):
     return sum(1 for c in g['components'] if c.get('kind') == kind)
 
 
+def _provided(g, kind, function):
+    """Standalone components, plus CDUs that declare the function internally.
+
+    The generator models a CDU as a four-port envelope and lists its internal
+    provisions in `functions`; it deliberately does not extrude CDU internals as
+    separate piped components. Counting only standalone components therefore
+    reported a missing item that the assembly declares it contains."""
+    inside = sum(1 for c in g['components']
+                 if c.get('kind') == 'cdu' and function in (c.get('functions') or []))
+    return _count(g, kind) + inside
+
+
 CHECKS = {}
 
 
@@ -145,8 +157,16 @@ def _(g, c, P):
 
 @check('tcs_loop_within_available_dp')
 def _(g, c, P):
-    worst = max(s['required_tcs_pump_dp_Pa'] for s in g['hydraulics']['scenarios'])
-    return worst * PSI_PER_PA <= 80.0, worst * PSI_PER_PA, 80.0, 'psi required vs IT dP available 80-90 psi'
+    # Reads the preliminary pump screen. It used to read a hydraulics["scenarios"]
+    # block that no live code path writes any more, so the check raised KeyError
+    # and the design had no loop-pressure acceptance test at all.
+    screens = [s for s in (g['metadata'].get('preliminary_sizing') or {}).get('pump_screens', [])
+               if str(s.get('circuit_id', '')).startswith('TCS') and s.get('pump_dp_Pa') is not None]
+    if not screens:
+        return None, 'no TCS pump screen', 80.0, 'psi; run preliminary sizing to evaluate'
+    worst = max(s['pump_dp_Pa'] for s in screens)
+    return worst * PSI_PER_PA <= 80.0, worst * PSI_PER_PA, 80.0, \
+        'psi required at the prescribed duty, including margin, vs IT dP available 80-90 psi'
 
 
 @check('approach_matches_spec')
@@ -172,14 +192,14 @@ def _(g, c, P):
 
 @check('cdu_has_expansion_tank')
 def _(g, c, P):
-    n = _count(g, 'expansion_tank')
-    return n >= c.cdu_count, n, c.cdu_count, 'expansion tanks (one per CDU)'
+    n = _provided(g, 'expansion_tank', 'expansion')
+    return n >= c.cdu_count, n, c.cdu_count, 'expansion provisions: standalone vessels plus CDUs declaring one'
 
 
 @check('cdu_has_air_separator')
 def _(g, c, P):
-    n = _count(g, 'air_separator')
-    return n >= c.cdu_count, n, c.cdu_count, 'air separators (one per CDU)'
+    n = _provided(g, 'air_separator', 'air_separation')
+    return n >= c.cdu_count, n, c.cdu_count, 'air-separation provisions: standalone units plus CDUs declaring one'
 
 
 @check('secondary_filtration_rated')
@@ -256,6 +276,8 @@ def _(g, c, P):
 @check('seismic_braces_present')
 def _(g, c, P):
     n = _count(g, 'seismic_brace_transverse') + _count(g, 'seismic_brace_longitudinal')
+    if not c.include_seismic_braces:
+        return None, n, '> 0', 'seismic bracing is switched off for this design; enable it to evaluate the spacing'
     return n > 0, n, '> 0', 'seismic braces placed'
 
 
@@ -268,7 +290,8 @@ def _(g, c, P):
 
 @check('parallel_cdus_on_common_header')
 def _(g, c, P):
-    scen = [s for s in g['scenarios'] if s['name'] == 'all_three_online']
+    # Matched on the scenario's kind, not a name that assumed three units.
+    scen = [s for s in g['scenarios'] if s.get('kind') == 'operating']
     return bool(scen) and len(scen[0]['active_cdus']) == c.cdu_count, \
         len(scen[0]['active_cdus']) if scen else 0, c.cdu_count, 'CDUs sharing the common header'
 

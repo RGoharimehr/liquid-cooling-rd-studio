@@ -99,8 +99,15 @@ def verify_evidence(docs, meta):
     return results
 
 
+# The register is written against the OCP Deschutes module. Its fixed rack
+# pitch, row length and 2 MW / 500 GPM reference CDU are that module's numbers,
+# not universal requirements, so they can only fail a design that selected it.
+DESCHUTES = 'OCP-Specification-Deschutes_v1_0'
+
+
 def verify_model(graph, config, profile):
     results = []
+    selected = getattr(config, 'standards_profile', 'project')
     for d in REGISTER:
         if not d.check:
             continue
@@ -112,6 +119,11 @@ def verify_model(graph, config, profile):
                             'actual': None, 'expected': None, 'detail': f'{type(exc).__name__}: {exc}'})
             continue
         status = 'NOT_EVALUABLE' if ok is None else ('PASS' if ok else 'FAIL')
+        if status == 'FAIL' and d.document == DESCHUTES and selected != 'deschutes_module':
+            status = 'NOT_APPLICABLE'
+            detail = (str(detail) + f'. Measured against the Deschutes module reference, which does not '
+                      f'govern this design: standards_profile is {selected!r}. Select the Deschutes '
+                      f'profile to make this a requirement.')
         results.append({'id': d.id, 'check': d.check, 'status': status, 'severity': d.severity,
                         'actual': actual, 'expected': expected, 'detail': detail,
                         'choice': d.choice})
@@ -144,58 +156,6 @@ def verify_coverage(profile):
     return issues
 
 
-def run(graph, config, profile) -> dict:
-    docs, meta = load_corpus()
-    evidence = verify_evidence(docs, meta)
-    model = verify_model(graph, config, profile)
-    coverage = verify_coverage(profile)
-
-    def tally(rows, key='status'):
-        out = {}
-        for r in rows:
-            out[r[key]] = out.get(r[key], 0) + 1
-        return dict(sorted(out.items()))
-
-    blocking_failures = [r for r in model if r['status'] in ('FAIL', 'ERROR') and r['severity'] == 'blocking']
-    unsupported = [r for r in evidence if r['status'] == 'NOT_FOUND']
-    matrix = []
-    ev_by_id = {r['id']: r for r in evidence}
-    md_by_id = {r['id']: r for r in model}
-    for d in REGISTER:
-        ev, md = ev_by_id.get(d.id, {}), md_by_id.get(d.id)
-        matrix.append({
-            'id': d.id, 'area': d.area, 'choice': d.choice, 'rationale': d.rationale,
-            'basis': d.basis, 'severity': d.severity,
-            'document': d.document, 'clause': d.clause, 'quote': d.quote,
-            'evidence_status': ev.get('status'), 'evidence_authority': ev.get('authority'),
-            'check': d.check, 'model_status': md['status'] if md else 'NO_CHECK',
-            'measured': md['actual'] if md else None, 'required': md['expected'] if md else None,
-            'units_or_detail': md['detail'] if md else None,
-        })
-    return {
-        'summary': {
-            'decisions': len(REGISTER),
-            'evidence': tally(evidence),
-            'model': tally(model),
-            'blocking_failures': len(blocking_failures),
-            'unsupported_quotes': len(unsupported),
-            'corpus_documents': len(docs),
-            'corpus_authority': ('AUTHORITATIVE' if docs and all(not m['partial'] for m in meta.values())
-                                 else 'INDICATIVE - corpus contains partial extracts; '
-                                      'run tools/build_corpus.py against the source PDFs'),
-        },
-        'corpus': meta,
-        'traceability_matrix': matrix,
-        'evidence_results': evidence,
-        'model_results': model,
-        'coverage_issues': coverage,
-        'blocking_failures': blocking_failures,
-        'method': 'Evidence: verbatim quote located in the reference corpus after whitespace, smart-quote and '
-                  'micro-sign normalisation. Model: named check executed against the generated graph, returning '
-                  'a measured value. Coverage: structural audit of the register itself.',
-    }
-
-
 def clearance_diagnostics(graph,c):
     """Outside-surface and box checks against active project allowances."""
     checks=[];nodes={n['id']:n['xyz_m'] for n in graph['nodes']}
@@ -226,8 +186,29 @@ def clearance_diagnostics(graph,c):
     return {'checks':checks,'scope':'Bounding-box equipment/access and designated pipe-surface checks; not a full routed clash detector.'}
 
 
+def _tally(rows, key='status'):
+    out = {}
+    for row in rows:
+        out[row[key]] = out.get(row[key], 0) + 1
+    return dict(sorted(out.items()))
+
+
 def run(graph,config,profile):
-    """Active layout checks plus evidence audit; legacy pressure decisions are archived."""
+    """Acceptance checks on the model, plus the design-decision register.
+
+    Two layers, reported separately and never conflated. The G-series rows are
+    the acceptance gate: layout compliance, installation, routed geometry and
+    outage connectivity. A failure there blocks export. The DEC-series rows are
+    the design-decision register - each choice, its governing clause, the
+    verbatim quote located in the reference corpus, and a measured check against
+    this graph. Those are reported for review and do not gate export, because a
+    reference-module dimension is not an acceptance criterion for a project that
+    did not select that module.
+
+    This function used to be defined twice in this file; the second definition
+    shadowed the first, so the register, its model checks and its coverage audit
+    never ran at all and the evidence tally was collapsed to a single count.
+    """
     from placement import installation_diagnostics
     docs,meta=load_corpus();evidence=verify_evidence(docs,meta)
     rows=graph['metadata']['layout_compliance']['results']+installation_diagnostics(graph,config,profile)['checks']+graph['metadata'].get('geometry_diagnostics',{}).get('checks',[])+graph['metadata'].get('connectivity_scenarios',{}).get('checks',[])
@@ -240,5 +221,36 @@ def run(graph,config,profile):
     bad=[n for n,items in owners.items() if len(items)>2]
     models.append({'id':'GRAPH','check':'Graph identity and port ownership','status':'PASS' if len(ids)==len(set(ids)) and not bad and all(p in nodes for p in owners) else 'FAIL','severity':'blocking','actual':bad,'expected':[]})
     failures=[r for r in models if r['status']=='FAIL']
-    tally={s:sum(r['status']==s for r in models) for s in sorted({r['status'] for r in models})}
-    return {'summary':{'decisions':len(models),'model':tally,'evidence':{'indicative_records':len(evidence)},'blocking_failures':len(failures),'corpus_authority':'INDICATIVE: partial local source excerpts; reference comparison is not certification'},'model_results':models,'traceability_matrix':models,'blocking_failures':failures,'evidence_results':evidence,'corpus':meta,'coverage_issues':[{'kind':'scope','detail':'Checks cover declared equipment envelopes, routed centerline envelopes including insulation, and external port continuity. Vendor fitting bodies, maintenance operations, transport/egress, structural loads, controls and local code remain detailed-design work. No hydraulic capacity or operational redundancy is proven.'}]}
+    register=verify_model(graph,config,profile)
+    coverage=verify_coverage(profile)
+    evidence_by_id={r['id']:r for r in evidence}
+    register_by_id={r['id']:r for r in register}
+    decision_matrix=[{'id':d.id,'area':d.area,'choice':d.choice,'rationale':d.rationale,'basis':d.basis,
+        'severity':d.severity,'document':d.document,'clause':d.clause,'quote':d.quote,
+        'evidence_status':evidence_by_id.get(d.id,{}).get('status'),
+        'evidence_authority':evidence_by_id.get(d.id,{}).get('authority'),
+        'check':d.check,'model_status':register_by_id.get(d.id,{}).get('status','NO_CHECK'),
+        'measured':register_by_id.get(d.id,{}).get('actual'),
+        'required':register_by_id.get(d.id,{}).get('expected'),
+        'units_or_detail':register_by_id.get(d.id,{}).get('detail')} for d in REGISTER]
+    unsupported=[r for r in evidence if r['status']=='NOT_FOUND']
+    register_failures=[r for r in register if r['status'] in ('FAIL','ERROR')]
+    coverage+=[{'kind':'scope','detail':'Acceptance checks cover declared equipment envelopes, routed centerline envelopes including insulation, and external port continuity. Vendor fitting bodies, maintenance operations, transport/egress, structural loads, controls and local code remain detailed-design work. No hydraulic capacity or operational redundancy is proven.'}]
+    return {'summary':{
+            'decisions':len(models),'model':_tally(models),
+            'evidence':_tally(evidence),'unsupported_quotes':len(unsupported),
+            'blocking_failures':len(failures),
+            'design_register':{'decisions':len(REGISTER),'model':_tally(register),
+                'failures':len(register_failures),
+                'scope':'Reported for review; does not gate export'},
+            'corpus_documents':len(docs),
+            'corpus_authority':'INDICATIVE: partial local source excerpts; reference comparison is not certification'},
+        'model_results':models,'traceability_matrix':models,'blocking_failures':failures,
+        'design_register_results':register,'design_register_matrix':decision_matrix,
+        'design_register_failures':register_failures,
+        'evidence_results':evidence,'unsupported_quotes':unsupported,'corpus':meta,
+        'coverage_issues':coverage,
+        'method':'Acceptance: named checks executed against the generated graph, returning measured values; '
+                 'these gate export. Register: each design decision carries a verbatim quote located in the '
+                 'reference corpus after whitespace and smart-quote normalisation, plus a measured model '
+                 'check. Coverage: structural audit of the register itself.'}

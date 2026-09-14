@@ -1,14 +1,12 @@
-"""Design-flow sizing and path losses. This is not a nonlinear network/pump solver."""
-import math
-from collections import defaultdict
+"""Commercial pipe dimensions and the declared design flow for each circuit.
 
-FLUIDS = {
- 'TCS': {'rho_kg_m3': 1017.5632747528, 'cp_J_kg_K': 3952.5072241237, 'mu_Pa_s': .00157,
-         'temperature_C': 36.0, 'source': 'Dynalene PG 2020 tables, 25 vol%, interpolate 90/100 F at 96.8 F',
-         'status': 'sourced/interpolated; ASSUMPTION: this inhibited formulation represents selected coolant'},
- 'FWS': {'rho_kg_m3': 995.0, 'cp_J_kg_K': 4178.0, 'mu_Pa_s': .00077,
-         'temperature_C': 32.0, 'source': 'ASSUMPTION: rounded water properties near 32 C', 'status': 'assumed'}
-}
+Flow is derived here once, from the configuration's own fluid properties and
+selected flow basis, so the graph and `preliminary_sizing` cannot report two
+different design flows for the same circuit. Pressure loss belongs to
+`preliminary_sizing`; there is no network or pump solver anywhere in this
+package.
+"""
+import math
 # Commercial dimensions in inches. Copper Development Association Type L table;
 # carbon steel ASME B36.10M Schedule 40 dimensions as reproduced by manufacturer.
 COPPER = [(1,1.125,.050),(1.25,1.375,.055),(1.5,1.625,.060),(2,2.125,.070),
@@ -32,28 +30,54 @@ CATALOGUES = {'copper_type_l':(COPPER,'ASTM B88 Type L (CDA dimensions)'),
               'stainless_sch10':(STAINLESS,'ASME B36.19M Schedule 10S')}
 
 
+def _fluid(c, service):
+    """Properties as entered for this design, never a hard-coded formulation."""
+    prefix = service.lower()
+    return (getattr(c, prefix + '_density_kg_m3'), getattr(c, prefix + '_specific_heat_J_kgK'),
+            getattr(c, prefix + '_delta_K'))
+
+
 def heat_flows(c):
+    """Declared heat and volumetric flow per circuit, on the selected basis.
+
+    TCS follows `flow_input_mode`: either a prescribed L/min per liquid kW, or
+    the rate form of the heat equation at the entered temperature rise. FWS and
+    CWS are always heat balance. `preliminary_sizing.evaluate` derives the same
+    numbers the same way and the two are checked against each other.
+    """
     from air_cooling import heat_ledger
-    ledger=heat_ledger(c)
-    heat_rack=c.rack_power_W*c.liquid_fraction
-    heat_total=heat_rack*c.rows*c.racks_per_row
-    t=FLUIDS['TCS']; f=FLUIDS['FWS']
-    t_mass=heat_total/(t['cp_J_kg_K']*c.tcs_delta_K)
-    f_mass=heat_total/(f['cp_J_kg_K']*c.fws_delta_K)
-    plant_mass=ledger['chiller_W']/(f['cp_J_kg_K']*c.fws_delta_K)
-    return {'rack_heat_W':heat_rack,'row_heat_W':heat_rack*c.racks_per_row,
-            'total_heat_W':heat_total,'air_heat_W':ledger['air_W'],'chiller_heat_W':ledger['chiller_W'],
-            'cdu_duty_heat_W':heat_total/(c.cdu_count-c.redundancy),
-            'tcs_total_mass_kg_s':t_mass,'tcs_total_m3_s':t_mass/t['rho_kg_m3'],
-            'fws_total_mass_kg_s':plant_mass,'fws_total_m3_s':plant_mass/f['rho_kg_m3'],
-            'fws_cdu_total_m3_s':f_mass/f['rho_kg_m3'],
-            'rack_mass_kg_s':t_mass/(c.rows*c.racks_per_row),
-            'rack_m3_s':t_mass/t['rho_kg_m3']/(c.rows*c.racks_per_row),
-            'row_mass_kg_s':t_mass/c.rows,'row_m3_s':t_mass/t['rho_kg_m3']/c.rows,
-            'cdu_secondary_mass_kg_s':t_mass/(c.cdu_count-c.redundancy),
-            'cdu_secondary_m3_s':t_mass/t['rho_kg_m3']/(c.cdu_count-c.redundancy),
-            'cdu_primary_mass_kg_s':f_mass/(c.cdu_count-c.redundancy),
-            'cdu_primary_m3_s':f_mass/f['rho_kg_m3']/(c.cdu_count-c.redundancy)}
+    ledger = heat_ledger(c)
+    heat_rack = c.rack_power_W * c.liquid_fraction
+    heat_total = heat_rack * c.rows * c.racks_per_row
+    duty_units = c.cdu_count - c.redundancy
+    t_rho, t_cp, t_dK = _fluid(c, 'tcs')
+    f_rho, f_cp, f_dK = _fluid(c, 'fws')
+    if c.flow_input_mode == 'lpm_per_kw':
+        tcs_total = heat_total / 1000. * c.flow_lpm_per_kw / 60000.
+        basis = f'{c.flow_lpm_per_kw:g} L/min per liquid kW (prescribed)'
+    else:
+        tcs_total = heat_total / (t_rho * t_cp * t_dK)
+        basis = f'heat balance at {t_dK:g} K rise'
+    t_mass = tcs_total * t_rho
+    fws_cdu_total = heat_total / (f_rho * f_cp * f_dK)
+    plant_mass = ledger['chiller_W'] / (f_cp * f_dK)
+    racks = c.rows * c.racks_per_row
+    return {'rack_heat_W': heat_rack, 'row_heat_W': heat_rack * c.racks_per_row,
+            'total_heat_W': heat_total, 'air_heat_W': ledger['air_W'], 'chiller_heat_W': ledger['chiller_W'],
+            'cdu_duty_heat_W': heat_total / duty_units,
+            'cdu_duty_basis': 'Hall liquid heat divided by installed minus requested simultaneous outages. '
+                              'Independent cooling pods are allocated separately in preliminary_sizing.',
+            'tcs_flow_basis': basis,
+            'implied_tcs_delta_K': heat_total / (t_rho * t_cp * tcs_total) if tcs_total else None,
+            'tcs_total_mass_kg_s': t_mass, 'tcs_total_m3_s': tcs_total,
+            'fws_total_mass_kg_s': plant_mass, 'fws_total_m3_s': plant_mass / f_rho,
+            'fws_cdu_total_m3_s': fws_cdu_total,
+            'rack_mass_kg_s': t_mass / racks, 'rack_m3_s': tcs_total / racks,
+            'row_mass_kg_s': t_mass / c.rows, 'row_m3_s': tcs_total / c.rows,
+            'cdu_secondary_mass_kg_s': t_mass / duty_units,
+            'cdu_secondary_m3_s': tcs_total / duty_units,
+            'cdu_primary_mass_kg_s': fws_cdu_total * f_rho / duty_units,
+            'cdu_primary_m3_s': fws_cdu_total / duty_units}
 
 
 class NoCatalogueSize(ValueError):
@@ -99,143 +123,3 @@ def select_size(flow,material,cap):
             return {'nominal_size_in':nominal,'od_m':od*.0254,'id_m':inner,
                     'wall_m':wall*.0254,'required_id_m':required,'size_standard':std}
     raise NoCatalogueSize(flow,material,cap)
-
-
-def scenario_flow(edge, active):
-    b=edge['flow_basis']; base=b['total_m3_s']
-    if b['type']=='fixed': return base
-    if b['type']=='cdu': return base/len(active) if b['cdu'] in active else 0.
-    if b['type']=='collector': return base*len(set(b['cdus']) & set(active))/len(active)
-    raise ValueError(b)
-
-
-def friction(re,relrough):
-    if re<=0:return 0.
-    if re<2300:return 64/re
-    # EPA EPANET 2.2 Swamee-Jain turbulent approximation.
-    turbulent=lambda r: .25/math.log10(relrough/3.7+5.74/r**.9)**2
-    if re >= 4000: return turbulent(re)
-    # ASSUMPTION: linear transition blend; flag transitional results for review.
-    weight=(re-2300)/(4000-2300)
-    return (1-weight)*64/re+weight*turbulent(4000)
-
-
-def loss(edge, flow):
-    f=FLUIDS[edge['service']]; d=edge['id_m']; area=math.pi*d*d/4
-    v=flow/area; re=f['rho_kg_m3']*v*d/f['mu_Pa_s']
-    rough=edge.get('roughness_m') or (1.5e-6 if edge['material']=='copper_type_l' else 45.72e-6)
-    ff=friction(re,rough/d)
-    dynamic=f['rho_kg_m3']*v*v/2
-    pipe=ff*edge['length_m']/d*dynamic if edge['kind']=='pipe' else 0.
-    kd=edge.get('K_reference_id_m',d)
-    kv=4*flow/(math.pi*kd*kd)
-    fitting=edge['K']*f['rho_kg_m3']*kv*kv/2
-    ref=edge['reference_flow_m3_s']
-    equipment=edge['reference_dp_Pa']*(flow/ref)**2 if ref else 0.
-    return {'velocity_m_s':v,'Re':re,'friction_factor':ff,'straight_dp_Pa':pipe,
-            'fitting_dp_Pa':fitting,'equipment_dp_Pa':equipment,'dp_Pa':pipe+fitting+equipment}
-
-
-def size_graph(g,c):
-    scenarios=[s for s in g['scenarios'] if s['kind']=='design']
-    for e in g['edges']:
-        e['design_flow_m3_s']=max(scenario_flow(e,s['active_cdus']) for s in scenarios)
-        e['flow_m3_s']=scenario_flow(e,list(range(1,c.cdu_count+1)))
-        # Keep full-level bore within a pipe family; local segments can have smaller flow.
-        family=max(e['design_flow_m3_s'],e.get('sizing_flow_m3_s',0))
-        cap=e.get('velocity_cap_m_s',c.velocity_cap_m_s)
-        e.update(select_size(family,e['material'],cap))
-        e.update(loss(e,e['design_flow_m3_s']))
-        e['velocity_cap_pass']=e['velocity_m_s']<=cap+1e-9
-    bycomp=defaultdict(list)
-    for e in g['edges']:bycomp[e['component_id']].append(e)
-    for comp in g['components']:
-        es=bycomp[comp['id']]
-        largest=max(es,key=lambda x:x['id_m'])
-        comp.update({k:largest[k] for k in ('nominal_size_in','id_m','od_m','material')})
-        comp['port_sizes_in']={}
-        for e in es:
-            for n in (e['from_node'],e['to_node']):
-                comp['port_sizes_in'][n]=max(comp['port_sizes_in'].get(n,0),e['nominal_size_in'])
-    # Reducer inlet inherits immediately upstream bore; outlet is its sized flow family.
-    incoming=defaultdict(list)
-    for e in g['edges']:incoming[e['to_node']].append(e)
-    for comp in g['components']:
-        if comp['kind']=='reducer':
-            e=bycomp[comp['id']][0]; prev=incoming[e['from_node']]
-            if prev:
-                comp['port_sizes_in'][e['from_node']]=prev[0]['nominal_size_in']
-                comp['inlet_nominal_size_in']=prev[0]['nominal_size_in']
-                comp['outlet_nominal_size_in']=e['nominal_size_in']
-                e['inlet_id_m']=prev[0]['id_m']
-                e['K_reference_id_m']=min(prev[0]['id_m'],e['id_m'])
-                e['provenance']['K_reference']='ASSUMPTION: reducer/expander K uses smaller connected inside diameter'
-    for e in g['edges']:
-        e.update(loss(e,e['design_flow_m3_s']))
-        e['hydraulic_result_basis']='design_flow_m3_s; maxima over N-duty scenarios, not one simultaneous operating network'
-        e['operating_results']={'basis':'all_three_online','flow_m3_s':e['flow_m3_s'],**loss(e,e['flow_m3_s'])}
-
-
-def longest_path(g,start,end,active,service,exclude=()):
-    adj=defaultdict(list)
-    for e in g['edges']:
-        if e['service']!=service or e['kind'] in exclude:continue
-        q=scenario_flow(e,active)
-        if q>0:adj[e['from_node']].append((e,loss(e,q)['dp_Pa']))
-    visiting=set(); cache={end:(0.,[])}
-    def walk(n):
-        if n in cache:return cache[n]
-        if n in visiting:raise ValueError('Unexpected cycle in passive network')
-        visiting.add(n);best=(-math.inf,[])
-        for e,dp in adj[n]:
-            score,path=walk(e['to_node'])
-            if dp+score>best[0]:best=(dp+score,[e['id']]+path)
-        visiting.remove(n);cache[n]=best;return best
-    score,ids=walk(start)
-    if not math.isfinite(score):raise ValueError(f'No path {start}->{end}')
-    ed={e['id']:e for e in g['edges']}
-    breakdown={k:0. for k in ('straight_dp_Pa','fitting_dp_Pa','equipment_dp_Pa')}
-    for i in ids:
-        e=ed[i]; l=loss(e,scenario_flow(e,active))
-        for k in breakdown:breakdown[k]+=l[k]
-    return {'start_node':start,'end_node':end,'dp_Pa':score,'edge_ids':ids,
-            'pipe_length_m':sum(ed[i]['length_m'] for i in ids if ed[i]['kind']=='pipe'),**breakdown}
-
-
-def analyze(g,c):
-    size_graph(g,c)
-    report=[]
-    for s in g['scenarios']:
-        active=s['active_cdus']; paths=[]
-        for i in active:
-            ports=g['metadata']['cdu_pump_nodes'][str(i)]
-            p=longest_path(g,ports['discharge'],ports['suction'],active,'TCS',('pump',))
-            p['cdu']=i;paths.append(p)
-        worst=max(paths,key=lambda x:x['dp_Pa'])
-        fws=longest_path(g,g['metadata']['fws_source'],g['metadata']['fws_sink'],active,'FWS')
-        nodes={n['id']:n for n in g['nodes']}
-        src=nodes[g['metadata']['fws_source']];snk=nodes[g['metadata']['fws_sink']]
-        elevation=(snk['xyz_m'] or snk['route_hint_m'])[2]-(src['xyz_m'] or src['route_hint_m'])[2]
-        static=FLUIDS['FWS']['rho_kg_m3']*9.80665*elevation
-        # Shared collector junctions enforce equal pressure. Select a common duty
-        # sufficient for every active pump; individual pump/control curves remain gaps.
-        report.append({'name':s['name'],'active_cdus':active,'tcs_pump_paths':paths,
-            'worst_tcs_path':worst,'required_tcs_pump_dp_Pa':worst['dp_Pa']*(1+c.pump_margin_fraction),
-            'required_tcs_pump_head_m':worst['dp_Pa']*(1+c.pump_margin_fraction)/(FLUIDS['TCS']['rho_kg_m3']*9.80665),
-            'fws_path':fws,'fws_boundary_elevation_m':elevation,'fws_static_dp_Pa':static,
-            'required_fws_available_dp_Pa':fws['dp_Pa']*(1+c.pump_margin_fraction)+static,
-            'fws_pressure_basis':'source minus sink static pressure; friction plus margin + elevation; equal boundary bores/velocities'})
-    violations=[e['id'] for e in g['edges'] if not e['velocity_cap_pass']]
-    continuity=[]
-    for s in g['scenarios']:
-        balance=defaultdict(float)
-        for e in g['edges']:
-            q=scenario_flow(e,s['active_cdus']);balance[e['from_node']]-=q;balance[e['to_node']]+=q
-        boundary={g['metadata']['fws_source'],g['metadata']['fws_sink']}
-        bad={n:q for n,q in balance.items() if n not in boundary and abs(q)>1e-10}
-        if bad:raise ValueError(f'Mass conservation failed in {s["name"]}: {bad}')
-        continuity.append({'scenario':s['name'],'max_internal_residual_m3_s':max((abs(q) for n,q in balance.items() if n not in boundary),default=0.)})
-    return {'fluid_properties':FLUIDS,'heat_and_flow':heat_flows(c),'scenarios':report,
-        'velocity_violations':violations,'continuity_checks':continuity,
-        'method':'Demand-based Darcy-Weisbach/Swamee-Jain path calculation. Assumed balanced parallel branches, NOT solved pump curves.',
-        'static_head_note':'Closed TCS elevation cancels in circulating head; fill pressure, NPSH and expansion vessel are unresolved.'}
