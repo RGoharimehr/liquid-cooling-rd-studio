@@ -64,7 +64,7 @@ def catalog():
         if 'velocity_cap' in key:field['active_when']={'sizing_mode':['preliminary','heat_balance']}
         if is_sizing:
             field['active_when']={'sizing_mode':'preliminary'}
-            field['source']={'title':'ASHRAE Fundamentals · flow and piping','edition':'2025 Handbook—Fundamentals','clause':'Ch. 3 Fluid Flow; Ch. 22 Pipe and Tube Design','status':'assumption','applicability':'Prescribed-flow preliminary sizing only','url':'https://handbook.ashrae.org/Handbooks/F25/SI/F25_Ch22/F25_Ch22_si.aspx','note':'Method supported by the source; this numeric input is a project assumption. Fluid properties must match the selected formulation and mean temperature. Equipment losses and efficiency require vendor confirmation.'}
+            field['source']={'title':'ASHRAE Fundamentals · flow and piping','edition':'2025 Handbook—Fundamentals','clause':'Ch. 3 Fluid Flow; Ch. 22 Pipe and Tube Design','status':'assumption','applicability':'Prescribed-flow screening with manual or automatically rounded pipe dimensions','url':'https://handbook.ashrae.org/Handbooks/F25/SI/F25_Ch22/F25_Ch22_si.aspx','note':'Method supported by the source; this numeric input is a project assumption. Fluid properties must match the selected formulation and mean temperature. Equipment losses and efficiency require vendor confirmation.'}
         if key=='flow_lpm_per_kw':
             field['unit']='L/min per liquid kW';field['source'].update(title='OCP OAI liquid-cooling example',edition='March 2023',clause='§1.3',url='https://www.opencompute.org/documents/oai-system-liquid-cooling-guidelines-in-ocp-template-mar-3-2023-update-pdf',note='The selected ratio is a project input. OAI PG25 guidance gives an example1.25–2.0 range, typical1.5 at10K; it is not a universal rack rule.140 liquid kW×1.2=168L/min.');field['active_when']={'sizing_mode':'preliminary','flow_input_mode':'lpm_per_kw'}
         if key.endswith('rotation_deg') or key=='pod_rotations_deg':field['unit']='°'
@@ -88,7 +88,7 @@ def catalog():
         if key.endswith('_kPa'):field.update(min=0,max=1000,step=1)
         if key in ('pump_efficiency','pump_head_margin_fraction'):field.update(min=.01 if key=='pump_efficiency' else 0,max=1,step=.01)
         if key=='flow_lpm_per_kw':field.update(min=.01,max=10,step=.05)
-        if key=='sizing_mode':field['source']['note']='Manual retains selected bores. Preliminary derives demand from liquid heat, rounds pipe families up through the catalogue, and calculates declared-flow pressure/head/power estimates. It does not balance or solve a fluid network.'
+        if key=='sizing_mode':field['source']['note']='Both modes calculate declared heat/flow duties, rough pressure loss, pump head/power and valve Kv/Cv. Manual retains selected commercial bores; Preliminary also rounds pipe families up for velocity limits. Neither mode balances or solves a fluid network.'
         if key.endswith('_design_pressure_bar'):
             field.update(group='Design duty',unit='bar',min=0,max=100,step=.5)
             field['label']=key[:3].upper()+' minimum equipment pressure rating'

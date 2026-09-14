@@ -28,7 +28,9 @@ class ReviewRepairs(unittest.TestCase):
   fields=catalog();self.assertEqual(len(fields),len({f['key'] for f in fields}))
   for f in fields:self.assertTrue(f['effect'] and f['source']['title'] and f['source']['status'],f['key'])
   keys={f['key'] for f in fields};self.assertNotIn('velocity_cap_m_s',keys);self.assertNotIn('vendor_hose_min_bend_radius_m',keys)
-  cws=next(f for f in fields if f['key']=='cws_density_kg_m3');self.assertEqual(cws['active_when'],{'plant_type':'water_cooled','sizing_mode':'preliminary'})
+  cws=next(f for f in fields if f['key']=='cws_density_kg_m3');self.assertEqual(cws['active_when'],{'plant_type':'water_cooled'})
+  for key in ('flow_input_mode','flow_lpm_per_kw','pump_efficiency','valve_design_dp_kPa','tcs_density_kg_m3','tcs_branch_velocity_cap_m_s'):
+   field=next(f for f in fields if f['key']==key);self.assertNotIn('sizing_mode',field.get('active_when',{}))
  def test_overlap_move_is_rejected_without_mutation(self):
   before=json.dumps(self.g,sort_keys=True)
   r=propose_zone_edit(self.g,self.c,'pod-1',anchor_m=[2,2]);self.assertFalse(r['valid']);self.assertTrue(r['checks'])

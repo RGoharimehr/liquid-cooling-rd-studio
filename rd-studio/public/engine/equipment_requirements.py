@@ -11,6 +11,7 @@ from dataclasses import asdict, is_dataclass
 from hashlib import sha256
 from json import dumps
 from math import isfinite
+from model import canonical_digest
 
 
 SCHEMA_VERSION = '1.0'
@@ -36,7 +37,7 @@ THROTTLING = {'balancing_valve', 'control_valve'}
 
 
 def _digest(value):
-    return sha256(dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    return canonical_digest(value)
 
 
 def _number(value, name, positive=False):
@@ -64,8 +65,8 @@ def build_requirements(graph, config=None, sizing=None):
 
     Normally call ``build_requirements(graph)`` after ``pipeline.build``. Optional
     config/sizing arguments must match the applied graph; they cannot substitute
-    draft parameters or a sizing file from another Apply. Manual models return
-    explicit unresolved requirements with ``ready_for_matching=False``.
+    draft parameters or a sizing file from another Apply. Manual models can be
+    matched when duties were evaluated at their verified, retained pipe sizes.
     """
     metadata = graph.get('metadata', {})
     applied = metadata.get('config')
@@ -82,7 +83,7 @@ def build_requirements(graph, config=None, sizing=None):
     if sizing is not None and _digest(sizing) != _digest(stored_sizing):
         raise ValueError('Sizing must match the preliminary results embedded in this applied graph')
     sizing = stored_sizing if sizing is None else sizing
-    calculated = isinstance(sizing, dict) and sizing.get('status') == 'PRELIMINARY_ESTIMATES' and config.get('sizing_mode') == 'preliminary'
+    calculated = isinstance(sizing, dict) and sizing.get('status') == 'PRELIMINARY_ESTIMATES' and config.get('sizing_mode') in ('preliminary', 'manual')
     sizing = sizing if calculated else {}
     estimates = {row['edge_id']: row for row in sizing.get('edge_estimates', [])}
     coefficients = {row['component_id']: row for row in sizing.get('valve_capacities', [])}
@@ -102,7 +103,8 @@ def build_requirements(graph, config=None, sizing=None):
             if edge.get(key) is None or abs(edge[key] - selection[key]) > 1e-8:
                 dimensions_mismatch.append({'edge_id': edge['id'], 'field': key,
                                             'actual': edge.get(key), 'calculated': selection[key]})
-    rounded = calculated and sizing.get('geometry_modified') is True and not dimensions_mismatch
+    manual_retained = calculated and config.get('sizing_mode') == 'manual' and sizing.get('dimension_basis') == 'manual_catalogue' and sizing.get('sizing_ready') is True
+    rounded = calculated and (sizing.get('geometry_modified') is True or manual_retained) and not dimensions_mismatch
     digest = metadata['config_hash']
     requirements = []
     for component in graph.get('components', []):
@@ -115,6 +117,10 @@ def build_requirements(graph, config=None, sizing=None):
         unresolved = []; ports = []; sides = []
         physical = not component.get('attachment', False)
         own_edges = by_component[cid]
+        if manual_retained:
+            for issue in sizing.get('unresolved', []):
+                if issue.get('component_id') == cid and issue.get('code') == 'MANUAL_VELOCITY_LIMIT_EXCEEDED':
+                    unresolved.append(_issue(issue['code'], issue['detail']))
         for port in component.get('port_details', []):
             nid = port['node_id']
             neighbors = [e for e in by_node[nid] if e['component_id'] != cid]
@@ -227,7 +233,8 @@ def build_requirements(graph, config=None, sizing=None):
             'unresolved': unresolved,
             'provenance': {'config_hash': digest, 'component_id': cid, 'edge_ids': [e['id'] for e in own_edges],
                 'sizing_schema_version': sizing.get('schema_version'), 'sizing_status': sizing.get('status'),
-                'flow_and_size_owner': 'RD generator', 'source_refs': list(sizing.get('sources', {}).values()),
+                'flow_and_size_owner': 'RD generator', 'dimension_basis': sizing.get('dimension_basis'),
+                'source_refs': list(sizing.get('sources', {}).values()),
                 'component_assumptions': deepcopy(component.get('assumptions', []))}})
     # Candidate decisions can compare requirements independently of coordinates,
     # while the enclosing document remains strictly bound to one applied model.
@@ -242,8 +249,10 @@ def build_requirements(graph, config=None, sizing=None):
         'ready_for_matching': bool(rounded),
         'preconditions': {'applied_hash_verified': True, 'preliminary_sizing_present': bool(calculated),
             'standard_sizes_applied': bool(rounded), 'dimension_mismatches': dimensions_mismatch,
+            'manual_dimensions_preserved': bool(manual_retained and not dimensions_mismatch),
+            'dimension_basis': sizing.get('dimension_basis'),
             'geometry_blocking_findings': metadata.get('geometry_diagnostics', {}).get('blocking_failures')},
         'requirements': requirements,
         'summary': {'total': len(requirements), 'ready_for_matching': sum(r['ready_for_matching'] for r in requirements),
             'unsupported': sum(not r['supported_by_finder'] for r in requirements)},
-        'scope': 'Headless catalogue requirements after RD calculations and standard-size rounding. No catalogue choice, material approval, connection-fit approval, pressure-rating approval or procurement authorization is made here.'}
+        'scope': 'Headless catalogue requirements after RD duty calculations at applied commercial pipe dimensions. Manual sizes are retained; preliminary mode rounds sizes for the velocity criterion. No catalogue choice, material approval, connection-fit approval, pressure-rating approval or procurement authorization is made here.'}

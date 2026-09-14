@@ -31,11 +31,11 @@ def describe(field):
         effect='Controls the bounded plant corridor router. Design actions → Try shorter plant routes tests candidates and reports measured changes; it does not prove a global optimum.'
     if k.endswith('_nominal_in'):
         active['sizing_mode']='manual';effect='Sets this pipe family’s commercial nominal size in Manual mode. Preliminary mode calculates and rounds its size instead.'
-    if 'velocity_cap' in k:active['sizing_mode']='preliminary';effect='Limits velocity for pipe-family sizing. The selected standard size changes only when the calculated bore crosses a catalogue-size threshold.'
+    if 'velocity_cap' in k:effect='Checks velocity at the declared flow. Manual mode reports exceedances and retains the selected bore; Preliminary mode rounds up to a commercial size within this limit.'
     if k.endswith('_material'):effect='Selects commercial dimensions and roughness for this pipe family. Material compatibility remains subject to vendor review.'
     sizing=('flow_input_mode','flow_lpm_per_kw','pump_efficiency','pump_head_margin_fraction','valve_design_dp_kPa','cdu_design_dp_kPa','rack_design_dp_kPa','chiller_design_dp_kPa','air_unit_design_dp_kPa','chiller_cop','tower_nozzle_dp_kPa','cws_static_lift_m')
     if k in sizing or k.endswith(('density_kg_m3','specific_heat_J_kgK','viscosity_Pa_s')):
-        active['sizing_mode']='preliminary';effect='Changes the prescribed-flow sizing report and downstream equipment requirements; it may not change equipment positions.'
+        effect='Changes prescribed flow, rough pressure-loss or equipment duties in both sizing modes. Manual mode retains selected pipe dimensions; these inputs do not move equipment.'
     if k=='flow_lpm_per_kw':active['flow_input_mode']='lpm_per_kw'
     if k=='tcs_delta_K':
         effect='Design TCS temperature-rise criterion. In heat-balance mode it sets flow; in L/min per kW mode the calculated rise is reported separately.'

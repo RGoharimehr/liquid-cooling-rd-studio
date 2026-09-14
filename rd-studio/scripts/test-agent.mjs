@@ -32,7 +32,9 @@ test('Reset old assignment arrays when pod membership count changes',()=>{
 });
 test('Reject browser workload overflow and inactive controls',()=>{
  assert.throws(()=>proposedConfig(base,[change('rows',32)],fields));
- assert.throws(()=>proposedConfig(base,[change('flow_lpm_per_kw',2)],fields));
+ assert.throws(()=>proposedConfig({...base,plant_type:'air_cooled'},[change('cws_density_kg_m3',1000)],fields));
+ const manual=proposedConfig({...base,sizing_mode:'manual'},[change('flow_lpm_per_kw',2)],fields);
+ assert.equal(manual.config.flow_lpm_per_kw,2);assert.equal(manual.config.sizing_mode,'manual');
 });
 test('Reject nested assignments and incomplete pod placement instead of staging them',()=>{
  assert.throws(()=>proposedConfig(base,[change('pod_count',2),change('row_pod_assignments',[[1,1],[1,2]])],fields));

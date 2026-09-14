@@ -53,8 +53,8 @@ export function reviewDesign(graph:DesignState|null,dirty:boolean):string[] {
  const messages=[dirty?'The canvas is the previous design. Pending parameters have not been checked.':'Reviewing applied design '+String(m.config_hash||'').slice(0,12)+'.',failed.length?failed.length+' failed geometry or installation checks require attention.':'No failed checks are recorded in this generated model.'];
  messages.push(...failed.slice(0,5).map(x=>x.id+' · '+x.check+': '+JSON.stringify(x.actual)+'; required '+JSON.stringify(x.required)));
  const sizing=m.preliminary_sizing;
- if(sizing){messages.push('Preliminary TCS flow: '+Number(sizing.thermal_flows?.TCS_L_min||0).toFixed(1)+' L/min. Pipe sizes use flow and velocity limits; Reynolds number informs Darcy friction.');if(sizing.unresolved?.length)messages.push(sizing.unresolved.length+' sizing qualifications remain.');}
- else messages.push('Pipe dimensions are manual. Select Preliminary sizing for flow, catalogue size and pressure-loss estimates.');
+ if(sizing){messages.push('Estimated TCS flow: '+Number(sizing.thermal_flows?.TCS_L_min||0).toFixed(1)+' L/min. '+(sizing.dimension_basis==='manual_catalogue'?'Your manual commercial pipe sizes are retained; velocity exceedances require review.':'Pipe sizes use flow and velocity limits.')+' Reynolds number informs Darcy friction.');if(sizing.unresolved?.length)messages.push(sizing.unresolved.length+' sizing qualifications remain.');}
+ else messages.push('Apply the design to calculate flow and pressure-loss estimates. Manual mode retains the selected commercial pipe sizes.');
  messages.push('Vendor hose limits, fluid properties and equipment pressure/clearance requirements need reviewed manufacturer inputs.','Connectivity checks cover the reported TCS scenarios; plant availability counts do not prove complete operating redundancy.','Native Revit/Flownex transfer and network pressure balancing remain unverified.');
  return messages;
 }

@@ -55,6 +55,29 @@ class PreliminarySizingTests(unittest.TestCase):
                 self.assertEqual(estimates[eid]['selected_size'], family['selection'])
                 self.assertTrue(estimates[eid]['velocity_cap_pass'])
 
+    def test_manual_losses_use_actual_bore_even_when_velocity_requires_larger_size(self):
+        from dataclasses import replace
+        config = replace(self.config, rack_nominal_in=1.)
+        graph, _ = build(config)
+        original = json.dumps(graph, sort_keys=True)
+        result = evaluate(graph, config, use_applied_sizes=True)
+        rack = next(e for e in graph['edges'] if e['kind'] == 'pipe' and e['level'] == 'rack')
+        loss = next(e for e in result['edge_estimates'] if e['edge_id'] == rack['id'])
+        expected_id = 1.025 * .0254
+        expected_velocity = .0028 / (pi * expected_id ** 2 / 4)
+        self.assertAlmostEqual(loss['selected_size']['id_m'], expected_id)
+        self.assertAlmostEqual(loss['velocity_m_s'], expected_velocity)
+        self.assertFalse(loss['velocity_cap_pass'])
+        expected_dp = loss['friction_factor'] * rack['length_m'] / expected_id * 1025. * expected_velocity ** 2 / 2
+        self.assertAlmostEqual(loss['straight_dp_Pa'], expected_dp)
+        self.assertEqual(result['suggested_config'], {})
+        self.assertEqual(original, json.dumps(graph, sort_keys=True))
+        # Demand outside the automatic catalogue still has a manual screening
+        # result at the declared bore; it is never presented as a passing size.
+        huge = evaluate(graph, options(config, flow_lpm_per_kw=100.), use_applied_sizes=True)
+        self.assertTrue(huge['sizing_ready'])
+        self.assertTrue(any(x.get('code') == 'MANUAL_VELOCITY_LIMIT_EXCEEDED' for x in huge['unresolved']))
+
     def test_prescribed_flow_conserves_every_internal_node(self):
         residual = {node['id']: 0. for node in self.graph['nodes']}
         results = {e['edge_id']: e for e in self.result['edge_estimates']}

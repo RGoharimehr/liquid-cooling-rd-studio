@@ -33,6 +33,12 @@ self.onmessage = async ({data}) => {
   working = true;
   try {
     const runtime = await initialize(requestId);
+    if (['export','zone_edit','find_equipment'].includes(action) && data.appliedConfig) {
+      runtime.globals.set('config_hash', data.configHash);
+      runtime.globals.set('applied_config_json', JSON.stringify(data.appliedConfig));
+      runtime.globals.set('equipment_report_json', JSON.stringify(data.equipmentReport || null));
+      await runtime.runPythonAsync('from web_api import ensure_session\nensure_session(config_hash, applied_config_json, equipment_report_json)');
+    }
     if (action === 'preview') {
       self.postMessage({type: 'status', requestId, message: 'Building and checking the network…'});
       runtime.globals.set('config_json', JSON.stringify(data.config));
@@ -44,9 +50,10 @@ self.onmessage = async ({data}) => {
       const proposal=JSON.parse(await runtime.runPythonAsync('from web_api import optimize_routes\noptimize_routes(config_json)'));
       self.postMessage({type:'optimization',requestId,proposal});
     } else if (action === 'zone_edit') {
+      self.postMessage({type:'status',requestId,message:'Checking placement and rerouting the zone…'});
       runtime.globals.set('config_hash', data.configHash);
       runtime.globals.set('edit_json',JSON.stringify(data.edit));
-      const proposal=JSON.parse(await runtime.runPythonAsync('from web_api import zone_edit\nzone_edit(config_hash, edit_json)'));
+      const proposal=JSON.parse(await runtime.runPythonAsync('from web_api import apply_zone_edit\napply_zone_edit(config_hash, edit_json)'));
       self.postMessage({type:'zone_edit',requestId,configHash:data.configHash,proposal});
     } else if (action === 'find_equipment') {
       catalogueAbort = new AbortController();

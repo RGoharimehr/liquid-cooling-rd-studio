@@ -1,6 +1,8 @@
 RD owns the design and its calculations. The equipment finder is a headless tool
-invoked after RD has applied preliminary calculations and rounded each pipe family
-up through its standard dimension catalogue. It never recalculates required flow,
+invoked after RD has calculated duties for the applied design. Preliminary mode
+rounds each pipe family up through its standard dimension catalogue. Manual mode
+retains the selected commercial sizes and calculates duties at their actual bores.
+The finder never recalculates required flow,
 pipe size, pump duty, working-pressure requirements or valve Kv/Cv.
 
 The published finder database is read at each equipment search from:
@@ -8,7 +10,8 @@ https://raw.githubusercontent.com/RGoharimehr/DATA-CENTER-EQUIPMENT-FINDER/main/
 
 The finder maintainer can publish new or corrected rows there independently.
 RD needs no rebuild, import or catalogue-management action for compatible data
-updates. Apply in Preliminary mode searches automatically; Refresh equipment
+updates. Apply in either Manual or Preliminary mode searches automatically when
+the applied requirements are ready; Refresh equipment
 matches repeats the tool call for the same applied design. This reads the finder's
 published CSV, not an unpublished local SQLite change. Publish the CSV through the
 finder's own data workflow when that database changes.
@@ -36,14 +39,25 @@ Multi-circuit CDU/chiller records remain capacity shortlists until vendor profil
 establish performance and separate port/circuit conditions. It records no automatic
 part decision and never changes geometry to make a catalogue entry fit.
 
+Manual sizing does not suppress equipment suggestions. RD supplies calculated
+heat and flow duties, rough routed pressure losses, pump duty and required valve
+Kv/Cv using the retained commercial bores. If a retained bore exceeds the declared
+velocity limit, the affected requirement and candidates carry that limitation;
+finding a candidate does not clear the sizing warning. Missing vendor evidence
+remains unresolved in both modes.
+
 Equipment lookup is separate from generation and export. Network errors,
 cancellation and malformed catalogue data retain the applied design and make the
 current equipment search unavailable. Exports remain available subject to RD's
-existing geometry gates. Every bundle includes equipment_requirements.json and
+existing geometry gates. A running catalogue search does not lock zone editing or
+downloads; a new design operation can interrupt the search. If the worker was
+cancelled, the next operation restores the applied configuration and matching
+cached equipment report before continuing. Every bundle includes equipment_requirements.json and
 equipment_candidates.json, tied to the applied config and catalogue SHA-256.
 The local assistant receives these results as read-only context. The page's
 rd_get_equipment_matches tool exposes the same applied requirements and candidates.
 
 Tests cover independent database updates, NPS/DN handling, filtering before top-N,
 missing numeric evidence, incompatible roles/fluids, invalid data, hash binding,
-failed-search export availability and cancellation retaining the RD runtime.
+failed-search export availability, restoration after worker cancellation, retained
+manual bores and tentative candidate status for manual velocity exceedances.

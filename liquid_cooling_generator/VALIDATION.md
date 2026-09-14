@@ -1,8 +1,18 @@
-# Validation record — 9 September 2026
+# Validation record — 13 September 2026
 
-The final engine suite passed **97 Python tests and 12 subtests in 92.32 seconds**, after the service-footprint and review-export fixes. The command was `python3 -m pytest -q` from the engine directory, using Python 3.12 with pytest and IfcOpenShell available.
+The current engine suite passed **106 Python tests and 12 subtests**, including the zone-editing, worker-session recovery and Manual-mode equipment-matching repairs. The command was `.venv-ifc/bin/python -m pytest -q` from the engine directory, with pytest and IfcOpenShell available.
 
-The final JavaScript/TypeScript checks and production build passed. The actual Pyodide engine smoke test passed all three shipped presets, generating 1,586, 2,877 and 2,256 components. These results verify the browser runtime package as well as the native Python engine.
+Current zone-interaction, finder transport/cancellation, and 12 design-action JavaScript tests passed; TypeScript and the production build passed. All three shipped presets passed Pyodide generation and export checks with 1,586, 2,877 and 2,256 components. After the browser exposed a numeric JSON hash mismatch, the shared hash was normalized across Python/browser number representations. The final full suite passed 105 tests and 12 subtests; its one legacy test fixture still used the former hash algorithm. After updating that fixture, all 11 equipment-requirement tests passed. No engine assertion remains failing.
+
+## Current repair regressions
+
+- A no-op zone click preserves automatic placement arrays and the applied configuration hash.
+- Consecutive zone moves regenerate and apply without a separate Apply call, and the resulting design remains exportable.
+- Placement rejection, a generation exception, or blocking routed geometry restores the prior successful engine session and its exports.
+- A cancelled worker can restore the applied configuration and its matching equipment report. A mismatched restoration hash is rejected before session mutation.
+- Manual sizing calculates duties using retained commercial bores, without modifying the selected dimensions. Equipment requirements and candidate qualification retain manual velocity-limit warnings and reject inconsistent bore metadata.
+
+The interface also keeps zone handles mounted during checks and provides Discard pending changes, Undo zone move and restoration of the last valid design. The in-app browser checks below exercise actual pointer events and the module worker.
 
 ## Verified engine coverage
 
@@ -26,6 +36,8 @@ An intentionally infeasible commercial-size demand still produces an editable ap
 The review ZIP contains no IFC, PCF, native Flownex project or native Revit handoff file. A stale hash is rejected. Correcting the sizing input produces a new exportable design and invalidates downloads tied to the old hash. These transitions and archive contents passed the automated regression.
 
 ## Browser observations
+
+On 13 September, local in-app browser cold startup, Manual-mode Apply and catalogue search completed (100 of 330 component duties had candidates, with unresolved qualification retained). A no-op handle click preserved the applied model. Two consecutive pointer drags moved pod 1 from x=0 to 0.5 m and 1.0 m without another Apply; the final hash prefix was `655852bfcf3e`. Handles and download controls remained usable. An overlapping move was rejected with named equipment/service-access conflicts and retained that design. The full-package action reached “Download prepared from the applied design.” Cancelling another package operation retained the model and download buttons. Browser retry after cancellation was interrupted by a page reload; restored-session export and repeated browser-number round trips passed the Python regressions. The current browser download was not independently inspected on disk.
 
 On 9 September, actual in-app browser module-worker cold startup and Apply completed successfully. A 90-degree plant rotation was accepted by top-view placement preflight and Apply regenerated an exportable model with hash `d71dfbb7b4c4914439e1a44a2ce657bee0cd6b9427dddfd77a299cf65e7fdfcf`. The browser saved `graph-json-bundle.zip`; ZIP integrity passed and its graph carried that exact applied hash. The final frontend build and Pyodide preset checks passed. This record does not imply that every interactive scenario was repeated in both browsers.
 

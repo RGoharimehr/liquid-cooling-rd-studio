@@ -27,10 +27,13 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(sum(c['kind']=='cdu' and 'secondary_pump' in c['functions'] for c in g['components']),3)
         self.assertFalse(any(c['kind']=='pump' for c in g['components']))
     def test_manual_sizes_and_no_pressure_solver(self):
+        self.assertEqual(self.g['hydraulics']['mode'],'manual')
+        self.assertFalse(self.g['hydraulics']['network_pressure_solve_performed'])
         for e in self.g['edges']:
-            self.assertEqual(e['design_flow_m3_s'],0)
+            self.assertGreaterEqual(e['design_flow_m3_s'],0)
             self.assertNotIn('dp_Pa',e)
             self.assertGreater(e['od_m'],e['id_m'])
+        self.assertTrue(any(e['design_flow_m3_s']>0 for e in self.g['edges']))
         e=next(e for e in self.g['edges'] if e['level']=='rack')
         self.assertEqual(e['nominal_size_in'],2)
         self.assertAlmostEqual(e['id_m'],1.985*.0254)

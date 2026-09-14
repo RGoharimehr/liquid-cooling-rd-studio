@@ -250,7 +250,8 @@ def _collect_duty(item):
     nps = {normalize_nps(p.get("nominal_nps_in"), dn=p.get("nominal_dn")) for p in ports}
     nps.discard(None)
     pressures, temperatures, materials, fluids, standards, connections = [], [], [], [], [], []
-    missing = []
+    missing = [issue['detail'] for issue in item.get('unresolved', [])
+               if issue.get('code') == 'MANUAL_VELOCITY_LIMIT_EXCEEDED' and issue.get('detail')]
     for side in sides:
         pressure = _number(side.get("minimum_pressure_rating_Pa"), "minimum_pressure_rating_Pa", positive=True)
         temperature = _number((side.get("temperature") or {}).get("required_max_temperature_C"), "required_max_temperature_C")

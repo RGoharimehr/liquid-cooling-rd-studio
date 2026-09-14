@@ -24,7 +24,7 @@ export default function DesignAssistant({open,onOpenChange,config,graph,fields,d
   finally{if(id===request.current){if(timer.current)clearTimeout(timer.current);setBusy(false);}}
  };
  const trial=async(next:DesignConfig,id:number):Promise<Trial>=>new Promise((resolve,reject)=>{
-  const worker=new Worker('/engine-worker.js?release=20260909-review-v1',{type:'module'});trialWorker.current=worker;trialReject.current=reject;
+  const worker=new Worker('/engine-worker.js?release=20260910-zone-session-v2',{type:'module'});trialWorker.current=worker;trialReject.current=reject;
   const finish=()=>{worker.terminate();trialWorker.current=null;trialReject.current=null;};
   worker.onmessage=({data})=>{if(id!==request.current||data.requestId!==id)return;if(data.type==='status'){setPhase('Checking proposal · '+data.message);return;}if(data.type==='error'){finish();reject(new Error(data.message));return;}if(data.type==='result'){const g=data.result.graph as DesignState;const findings=collectFindings(g).filter(x=>x.status==='FAIL');finish();resolve({status:data.result.exportable?'PASS':'FAIL',findings:findings.slice(0,6).map(x=>x.check+': '+JSON.stringify(x.actual)),count:findings.length,compute:g.components.filter(x=>x.kind==='compute_rack').length,cdus:g.components.filter(x=>x.kind==='cdu').length,hash:data.result.config_hash});}};
   worker.onerror=e=>{finish();reject(new Error(e.message||'The proposal checker could not start.'));};worker.postMessage({requestId:id,action:'preview',config:next});
@@ -33,7 +33,7 @@ export default function DesignAssistant({open,onOpenChange,config,graph,fields,d
   if(busy||designBusy||!graph||config.plant_type==='boundary')return;
   const id=++request.current,base=structuredClone(config),baseStamp=stamp,baseHash=graphHash;
   setBusy(true);setError('');setPhase('Testing plant routes with the generator…');
-  const worker=new Worker('/engine-worker.js?release=20260909-review-v1',{type:'module'});trialWorker.current=worker;
+  const worker=new Worker('/engine-worker.js?release=20260910-zone-session-v2',{type:'module'});trialWorker.current=worker;
   const finish=()=>{worker.terminate();trialWorker.current=null;if(timer.current)clearTimeout(timer.current);setBusy(false);};
   timer.current=setTimeout(()=>{finish();setError('Route search timed out. Reduce the design size or cancel and adjust placement.');},180000);
   worker.onerror=e=>{finish();setError(e.message||'Route search could not start.');};

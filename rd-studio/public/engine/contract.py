@@ -2,6 +2,7 @@
 import hashlib,json,math
 from collections import defaultdict
 from dataclasses import asdict
+from model import canonical_digest
 
 def finalize_equipment(g,c):
     from layout import effective_clearance
@@ -57,7 +58,7 @@ def attach_contract(g,c):
         comp['ports']=[rename.get(n,n) for n in original];comp['port_details']=details
         for key in ('port_directions','port_sizes_in','port_od_m','port_id_m'):
             if key in comp:comp[key]={rename.get(k,k):v for k,v in comp[key].items()}
-    g['metadata']['schema_version']='2.0';g['metadata']['config_hash']=hashlib.sha256(json.dumps(asdict(c),sort_keys=True,allow_nan=False).encode()).hexdigest()
+    g['metadata']['schema_version']='2.0';g['metadata']['config_hash']=canonical_digest(asdict(c))
     g['metadata']['units']={'coordinates':'m','length':'m','diameters':'m','nominal_size':'in','temperature':'C','heat':'W'}
 
 def transform_layout(g,c):

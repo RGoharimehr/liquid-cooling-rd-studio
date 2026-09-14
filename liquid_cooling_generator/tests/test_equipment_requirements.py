@@ -1,14 +1,13 @@
 """Applied-model integrity and engineering distinctions in catalogue requirements."""
 from copy import deepcopy
 from dataclasses import replace
-from hashlib import sha256
 from pathlib import Path
 import json
 import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from model import Config
+from model import Config, canonical_digest
 from pipeline import build
 from equipment_requirements import build_requirements
 
@@ -36,14 +35,25 @@ class EquipmentRequirementsTests(unittest.TestCase):
         self.assertTrue(invalid['preconditions']['dimension_mismatches'])
         self.assertTrue(all(not r['ready_for_matching'] for r in invalid['requirements']))
 
-    def test_manual_models_are_not_manufactured_into_sized_duties(self):
-        config = replace(self.config, sizing_mode='manual')
+    def test_manual_models_match_at_retained_bores_with_calculated_duties(self):
+        config = replace(self.config, sizing_mode='manual', rack_nominal_in=1.)
         graph, _ = build(config); result = build_requirements(graph)
-        self.assertFalse(result['ready_for_matching'])
-        self.assertTrue(all(not row['ready_for_matching'] for row in result['requirements']))
-        for row in result['requirements']:
-            self.assertIsNone(row['throttling'])
-            self.assertTrue(all(side['design_flow_m3_s'] is None for side in row['fluid_sides']))
+        sizing = graph['metadata']['preliminary_sizing']
+        self.assertTrue(result['ready_for_matching'])
+        self.assertTrue(result['preconditions']['manual_dimensions_preserved'])
+        self.assertEqual(sizing['dimension_basis'], 'manual_catalogue')
+        self.assertFalse(sizing['geometry_modified'])
+        self.assertEqual(sizing['suggested_config'], {})
+        qd = next(row for row in result['requirements'] if row['kind'] == 'quick_disconnect')
+        self.assertTrue(qd['ready_for_matching'])
+        self.assertAlmostEqual(qd['fluid_sides'][0]['design_flow_m3_s'], .0028)
+        self.assertTrue(all(port['nominal_nps_in'] == 1. for port in qd['ports']))
+        self.assertTrue(any(x['code'] == 'MANUAL_VELOCITY_LIMIT_EXCEEDED' for x in qd['unresolved']))
+        self.assertTrue(any(row['throttling'] for row in result['requirements']))
+        self.assertTrue(any(row['pump_duty'] for row in result['requirements']))
+        altered = deepcopy(graph)
+        next(edge for edge in altered['edges'] if edge['kind'] == 'pipe')['id_m'] *= 1.05
+        self.assertFalse(build_requirements(altered)['ready_for_matching'])
 
     def test_every_relevant_physical_component_is_retained(self):
         kinds = {'isolation_valve', 'balancing_valve', 'control_valve', 'check_valve',
@@ -90,7 +100,7 @@ class EquipmentRequirementsTests(unittest.TestCase):
         # without borrowing any pressure number from sizing results.
         graph = deepcopy(self.graph)
         graph['metadata']['config']['fws_design_pressure_bar'] = 7.
-        graph['metadata']['config_hash'] = sha256(json.dumps(graph['metadata']['config'], sort_keys=True, allow_nan=False).encode()).hexdigest()
+        graph['metadata']['config_hash'] = canonical_digest(graph['metadata']['config'])
         document = build_requirements(graph)
         for row in document['requirements']:
             for side in row['fluid_sides']:

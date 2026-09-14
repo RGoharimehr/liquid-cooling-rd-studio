@@ -14,8 +14,9 @@ from test_headless_selection import row, SOURCE
 from datacenter_equipment_finder.catalog import FIELD_NAMES
 import csv
 
-def test_headless_search_keeps_rd_design_and_exports_bound_after_failure():
-    config={**PRESETS['compact']['config'],'sizing_mode':'preliminary'}
+@pytest.mark.parametrize('sizing_mode',['preliminary','manual'])
+def test_headless_search_keeps_rd_design_and_exports_bound_after_failure(sizing_mode):
+    config={**PRESETS['compact']['config'],'sizing_mode':sizing_mode}
     applied=json.loads(web_api.preview(json.dumps(config)))
     assert applied['exportable']
     graph=web_api._session[0]
@@ -27,6 +28,7 @@ def test_headless_search_keeps_rd_design_and_exports_bound_after_failure():
     report=json.loads(web_api.find_equipment(applied['config_hash'],csv_text,json.dumps(metadata)))
     assert report['config_hash']==applied['config_hash']
     assert report['selected_part_numbers']==[]
+    assert report['summary']['with_candidates']>0
     assert graph['metadata']['equipment_requirements']==requirements
     assert json.dumps([graph['components'],graph['edges']],sort_keys=True)==geometry
     with pytest.raises(ValueError,match='another design'):web_api.find_equipment('0'*64,csv_text,json.dumps(metadata))

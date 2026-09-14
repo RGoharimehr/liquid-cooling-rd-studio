@@ -55,10 +55,12 @@ def build(config):
     from contract import finalize_equipment, attach_contract, transform_layout
     finalize_equipment(g,config)
     attach_contract(g,config)
-    if config.sizing_mode=='preliminary':
-        estimates=estimate(g,config)
-        estimates['geometry_modified']=all(f.get('selection') for f in estimates['size_families'])
-        estimates['scope']='Catalogue sizes applied to uniform pipe families; routed geometry is checked separately. Prescribed-flow estimates, not a balanced network solution.'
+    if config.sizing_mode in ('preliminary','manual'):
+        from preliminary_sizing import evaluate as estimate
+        manual=config.sizing_mode=='manual'
+        estimates=estimate(g,config,use_applied_sizes=manual)
+        estimates['geometry_modified']=not manual and all(f.get('selection') for f in estimates['size_families'])
+        estimates['scope']=('Manual commercial pipe sizes retained; flow, pressure loss, pump head and valve duties evaluated at those bores. ' if manual else 'Catalogue sizes applied to uniform pipe families; routed geometry is checked separately. ')+'Prescribed-flow estimates, not a balanced network solution.'
         g['metadata']['preliminary_sizing']=estimates
         byedge={e['edge_id']:e for e in estimates['edge_estimates']}
         for edge in g['edges']:
@@ -66,8 +68,12 @@ def build(config):
             edge['flow_m3_s']=item.get('flow_m3_s') or 0
             edge['design_flow_m3_s']=item.get('design_flow_m3_s') or 0
             edge['preliminary_dp_Pa']=item.get('total_dp_Pa')
+            edge['velocity_m_s']=item.get('velocity_m_s')
+            edge['velocity_cap_pass']=item.get('velocity_cap_pass')
             edge['hydraulic_result_basis']='Prescribed flow and preliminary Darcy-Weisbach estimate; network not balanced'
-        g['hydraulics'].update(mode='preliminary',flow_assignment='prescribed; see preliminary_sizing',network_pressure_solve_performed=False)
+            edge['provenance']['flow']=edge['hydraulic_result_basis']
+        g['hydraulics'].update(mode=config.sizing_mode,flow_assignment='prescribed; see preliminary_sizing',network_pressure_solve_performed=False,
+            dimension_basis=estimates['dimension_basis'])
     from connectivity import evaluate
     g['metadata']['connectivity_scenarios']=evaluate(g,config)
     place_installation(g,profile)
@@ -134,7 +140,7 @@ def emit(graph,profile,out):
     _emit_geometry(graph,out,_edge_index(graph));_emit_flownex(graph,out)
     dump(out/'graph.json',graph)
     (out/'routing_overview.svg').write_text(plan_svg(graph))
-    report=['# Reference layout engineering review','',f'{config.rows*config.racks_per_row} compute racks; {config.network_rows*config.network_racks_per_row} air-cooled network racks; {config.cdu_count} CDU envelopes.',f'Layout: {config.layout_style}. Return topology: {config.return_topology}. CDU placement: {config.cdu_placement}.','', 'This is a parameterized reference layout, not a pressure or network solver. Flow values are unassigned in manual mode. Nominal dimensions are catalogue values; equipment and fitting envelopes are conceptual.','', '## Installation and sources','', 'Every web control has a source or project-assumption label. Reference-specific dimensions are not universal installation requirements. The Deschutes checks apply only when that module profile is explicitly selected. Consult traceability_matrix.json, layout_compliance.json and installation_diagnostics.json for measured findings.', '', 'RD113 R0 spatial preset uses the page-5 diagram: 64 AI and 24 network racks, of which 8 are 40 kW. The prose and table conflict with this count. Its central network pod is air cooled. Cooling pods are independently assigned. Electrical infrastructure is outside this model.', '', '## Export handoff','', 'IFC4: typed physical objects, owned connected ports, separate FWS/TCS systems, and conceptual meshes. Import/link in Revit for coordination; IFC objects are not guaranteed native editable Revit MEP families. Confirm your Revit/IFC version and mapping.', '', 'PCF: pipes, bends, tees, valves, reducers and labelled MISC-COMPONENT inline placeholders. Map placeholders to the installed target component library. PCF is a generic interchange draft, not yet validated in licensed Flownex. No native Flownex .fnm is emitted.', '', 'JSON: complete connection graph, SI coordinates, equipment IDs, elevations, bores and source metadata. OBJ uses the same geometry as IFC and the web 3D view.','',f'Verification summary: {json.dumps(trace["summary"])}']
+    report=['# Reference layout engineering review','',f'{config.rows*config.racks_per_row} compute racks; {config.network_rows*config.network_racks_per_row} air-cooled network racks; {config.cdu_count} CDU envelopes.',f'Layout: {config.layout_style}. Return topology: {config.return_topology}. CDU placement: {config.cdu_placement}.','', 'This is a parameterized reference layout, not a pressure or network solver. Manual mode retains selected commercial bores while estimating declared flows and pressure losses; preliminary mode also rounds pipe sizes. Nominal dimensions are catalogue values; equipment and fitting envelopes are conceptual.','', '## Installation and sources','', 'Every web control has a source or project-assumption label. Reference-specific dimensions are not universal installation requirements. The Deschutes checks apply only when that module profile is explicitly selected. Consult traceability_matrix.json, layout_compliance.json and installation_diagnostics.json for measured findings.', '', 'RD113 R0 spatial preset uses the page-5 diagram: 64 AI and 24 network racks, of which 8 are 40 kW. The prose and table conflict with this count. Its central network pod is air cooled. Cooling pods are independently assigned. Electrical infrastructure is outside this model.', '', '## Export handoff','', 'IFC4: typed physical objects, owned connected ports, separate FWS/TCS systems, and conceptual meshes. Import/link in Revit for coordination; IFC objects are not guaranteed native editable Revit MEP families. Confirm your Revit/IFC version and mapping.', '', 'PCF: pipes, bends, tees, valves, reducers and labelled MISC-COMPONENT inline placeholders. Map placeholders to the installed target component library. PCF is a generic interchange draft, not yet validated in licensed Flownex. No native Flownex .fnm is emitted.', '', 'JSON: complete connection graph, SI coordinates, equipment IDs, elevations, bores and source metadata. OBJ uses the same geometry as IFC and the web 3D view.','',f'Verification summary: {json.dumps(trace["summary"])}']
     (out/'ENGINEERING_REVIEW.md').write_text('\n'.join(report)+'\n')
     dump(out/'sha256_manifest.json',{str(p.relative_to(out)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(out.rglob('*')) if p.is_file() and p.name!='sha256_manifest.json'})
     return graph

@@ -65,7 +65,7 @@ def test_independent_catalogue_update_changes_results_without_rd_change():
     assert one['catalogue_sha256']!=two['catalogue_sha256']
     assert two['items'][0]['candidates'][0]['component']['part_number']=='UPDATED'
 
-def test_missing_duty_and_manual_sizing_prevent_matching():
+def test_missing_duty_or_inconsistent_dimensions_prevent_matching():
     for req in [requirement(ready_for_matching=False),dict(requirement(),ready_for_matching=False)]:
         result=query(req,[row()]);assert result['summary']['with_candidates']==0
 
@@ -95,3 +95,12 @@ def test_multicircuit_generic_fluid_rating_cannot_exclude_the_other_side():
     candidate=result['items'][0]['candidates'][0]
     assert candidate['status']=='tentative'
     assert any('Per-circuit coolant' in note for note in candidate['limitations'])
+
+def test_manual_velocity_exceedance_remains_a_tentative_candidate_limitation():
+    req = requirement(unresolved=[{'code':'MANUAL_VELOCITY_LIMIT_EXCEEDED',
+                                  'detail':'Manual bore gives 5.2 m/s above the 1.5 m/s criterion; review size or demand.'}])
+    report = query(req, [row()])
+    candidates = report['items'][0]['candidates']
+    assert candidates
+    assert all(candidate['status'] == 'tentative' for candidate in candidates)
+    assert all(any('Manual bore gives 5.2' in note for note in candidate['limitations']) for candidate in candidates)

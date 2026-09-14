@@ -222,12 +222,15 @@ def _longest_directed_path(edges, estimates, signed_flows, start, end, exclude_k
             'equipment_dp_Pa': sum(estimates[e]['equipment_dp_Pa'] for e in path)}
 
 
-def evaluate(graph, config):
+def evaluate(graph, config, *, use_applied_sizes=False):
     """Return independent sizing recommendations and transparent assumptions.
 
     The returned ``size_families`` can be applied to nominal-size parameters by
     the caller, followed by a complete geometry rebuild and collision check.
-    Nothing in ``graph`` or ``config`` is mutated here.
+    With ``use_applied_sizes=True``, use the manually selected commercial bores
+    for losses and equipment duties. Never substitute a velocity-based size or
+    emit a configuration patch in this mode. Nothing in ``graph`` or ``config``
+    is mutated here.
     """
     mode = _get(config, 'flow_input_mode', 'lpm_per_kw')
     if mode not in ('lpm_per_kw', 'heat_balance'):
@@ -392,10 +395,28 @@ def evaluate(graph, config):
                          'size_family': fkey, 'flow_basis': 'Prescribed equipment sharing; continuity on passive trees. Design flow is an independent sizing envelope.'}
     for family in families.values():
         try:
-            family['selection'] = select_size(family['design_flow_m3_s'], family['material'], family['velocity_cap_m_s'])
-            family['status'] = 'CATALOGUE_RECOMMENDATION'
+            if use_applied_sizes:
+                table, standard = CATALOGUES[family['material']]
+                applied = [edge_by_id[eid] for eid in family['edge_ids']]
+                first = applied[0]
+                match = next((row for row in table if row[0] == first.get('nominal_size_in')), None)
+                if not match:
+                    raise ValueError('The applied nominal size is absent from the verified commercial catalogue')
+                nominal, od, wall = match
+                size = {'nominal_size_in': nominal, 'od_m': od * .0254,
+                        'id_m': (od - 2 * wall) * .0254, 'wall_m': wall * .0254,
+                        'required_id_m': sqrt(4 * family['design_flow_m3_s'] / (pi * family['velocity_cap_m_s'])),
+                        'size_standard': standard}
+                if any(edge.get(key) is None or abs(edge[key] - size[key]) > 1e-8
+                       for edge in applied for key in ('nominal_size_in', 'id_m', 'od_m')):
+                    raise ValueError('The applied pipe family does not have consistent commercial dimensions')
+                family['selection'] = size
+                family['status'] = 'MANUAL_CATALOGUE_SIZE_RETAINED'
+            else:
+                family['selection'] = select_size(family['design_flow_m3_s'], family['material'], family['velocity_cap_m_s'])
+                family['status'] = 'CATALOGUE_RECOMMENDATION'
         except ValueError as exc:
-            family['selection'] = None; family['status'] = 'NO_CATALOGUE_SIZE'; family['reason'] = str(exc)
+            family['selection'] = None; family['status'] = 'INVALID_APPLIED_SIZE' if use_applied_sizes else 'NO_CATALOGUE_SIZE'; family['reason'] = str(exc)
             family['diagnostic']=getattr(exc,'diagnostic',{})
             pending.append({'family': family['family'], 'reason': str(exc)})
     # Set every recommendation before evaluating reducers; the smaller adjacent
@@ -446,6 +467,10 @@ def evaluate(graph, config):
                       total_dp_Pa=straight + fitting + equipment_dp,
                       loss_K=k, K_reference_id_m=reference_diameter,
                       loss_basis='Routed length plus declared project K/pressure allocations; manufacturer curves unassigned')
+        if use_applied_sizes and not result['velocity_cap_pass']:
+            pending.append({'code': 'MANUAL_VELOCITY_LIMIT_EXCEEDED', 'edge_id': eid,
+                'component_id': edge['component_id'], 'family': family['family'],
+                'detail': f'Manual NPS {size["nominal_size_in"]:g} gives {velocity:.2f} m/s at the declared duty, above {family["velocity_cap_m_s"]:g} m/s. The selected bore is retained; review its size or demand.'})
         if kind in ('balancing_valve', 'control_valve'):
             valves.append({'component_id': edge['component_id'], 'edge_id': eid, 'flow_m3_s': flow,
                            **valve_capacity(flow, fluid['rho_kg_m3'], valve_dp)})
@@ -490,11 +515,12 @@ def evaluate(graph, config):
     unresolved = pending + warnings
     suggested_config = {}
     for family in families.values():
-        if family['selection']:
+        if family['selection'] and not use_applied_sizes:
             key = family['parameter']
             suggested_config[key] = max(suggested_config.get(key, 0.), family['selection']['nominal_size_in'])
     return {'schema_version': '1.0', 'status': 'PRELIMINARY_ESTIMATES',
             'network_pressure_solve_performed': False, 'geometry_modified': False, 'sizing_ready':all(f.get('selection') for f in families.values()),
+            'dimension_basis': 'manual_catalogue' if use_applied_sizes else 'velocity_catalogue_recommendation',
             'flow_input_mode': mode, 'flow_lpm_per_liquid_kw': ratio if mode == 'lpm_per_kw' else None,
             'fluid_properties': fluids, 'rack_and_equipment_duties': duties,
             'thermal_flows': {'liquid_heat_W': total_heat,'air_heat_W':air_heat,'plant_heat_W':plant_heat,'FWS_air_m3_s':heat_flow(air_heat,'FWS'), 'TCS_m3_s': sum(flow_by_pod.values()),
@@ -508,7 +534,7 @@ def evaluate(graph, config):
             'size_families': list(families.values()), 'edge_estimates': list(estimates.values()),
             'pump_screens': pumps, 'valve_capacities': valves, 'unresolved': unresolved,
             'assumptions': {'K_by_kind': k_values, 'allocated_dp_Pa_by_kind': allocations,
-                'K_reference': 'Selected local bore; reducer uses smaller connected recommended bore',
+                'K_reference': 'Selected local bore; reducer uses smaller connected bore',
                 'flow_sharing': 'All modeled units share equally within their assigned pod or plant bank; installed spare units are included in all-online flows',
                 'sizing_envelope': 'Rack and row demands, full circuit main flow, and equipment duty division by installed-minus-spares. These maxima do not represent one solved operating network.',
                 'equipment': 'CDU and chiller allocations apply independently to each fluid side; rack allocation represents aggregate IT-side loss',

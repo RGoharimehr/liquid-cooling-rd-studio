@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import zipfile
-from model import Config
+from model import Config, canonical_digest
 from pipeline import build, emit
 
 _session = None
@@ -18,8 +18,22 @@ def _json(value):
 
 def _applied(config_hash):
     if _session is None or _session[2] != config_hash:
-        raise ValueError('This equipment search belongs to another design. Apply the current parameters.')
+        raise ValueError('This operation belongs to another design. Restore or apply the intended parameters.')
     return _session[0]
+
+def ensure_session(config_hash, config_json, equipment_report_json='null'):
+    """Recover a terminated worker using the exact applied inputs, never draft inputs."""
+    config = Config.from_dict(json.loads(config_json))
+    canonical = asdict(config)
+    digest = canonical_digest(canonical)
+    if digest != config_hash:
+        raise ValueError('The saved applied inputs do not match this download. Apply the intended design again.')
+    if _session is None or _session[2] != digest:
+        preview(_json(canonical))
+        report = json.loads(equipment_report_json)
+        if isinstance(report, dict) and report.get('applied_config_hash') == digest:
+            _session[0]['metadata']['equipment_finder'] = report
+    return digest
 
 def zone_edit(config_hash, edit_json):
     graph = _applied(config_hash)
@@ -29,6 +43,46 @@ def zone_edit(config_hash, edit_json):
         raise ValueError('Unsupported zone edit. Choose a zone, then move, rotate or flip it.')
     zone_id = edit.pop('zone_id', None)
     return _json(propose_zone_edit(graph, Config.from_dict(graph['metadata']['config']), zone_id, **edit))
+
+def apply_zone_edit(config_hash, edit_json):
+    """Commit a checked direct manipulation, rolling back a rejected route atomically."""
+    global _session
+    graph = _applied(config_hash)
+    edit = json.loads(edit_json)
+    if not isinstance(edit, dict) or set(edit)-{'zone_id','anchor_m','rotation_deg','flip_x','flip_y'}:
+        raise ValueError('Unsupported zone edit. Choose a zone, then move, rotate or flip it.')
+    zone = next((z for z in graph['layout']['editable_zones'] if z['id'] == edit.get('zone_id')), None)
+    if zone is None:
+        raise ValueError('That equipment zone is not in the applied design.')
+    # A click or a sub-grid pointer movement must not materialize automatic arrays.
+    anchor = edit.get('anchor_m', zone['anchor_m'])
+    unchanged = (isinstance(anchor, list) and len(anchor) >= 2
+                 and all(type(anchor[i]) in (int, float) and abs(anchor[i]-zone['anchor_m'][i]) < 1e-7 for i in range(2))
+                 and edit.get('rotation_deg', zone.get('rotation_deg', 0)) == zone.get('rotation_deg', 0)
+                 and edit.get('flip_x', zone.get('flip_x', False)) == zone.get('flip_x', False)
+                 and edit.get('flip_y', zone.get('flip_y', False)) == zone.get('flip_y', False))
+    if unchanged:
+        return _json({'valid':True, 'no_change':True, 'zone_id':zone['id'], 'checks':[]})
+    previous = _session
+    proposal = json.loads(zone_edit(config_hash, edit_json))
+    if not proposal['valid']:
+        return _json(proposal)
+    try:
+        result = json.loads(preview(_json(proposal['config'])))
+        # Keep a valid applied design exportable. Already-blocked concepts can
+        # continue being arranged to repair their remaining independent findings.
+        if not result['exportable'] and not previous[3]:
+            _session = previous
+            return _json({'valid':False, 'zone_id':zone['id'],
+                          'checks':result['graph']['metadata']['blocking_findings']})
+        return _json({'valid':True, 'zone_id':zone['id'], 'checks':[], 'result':result})
+    except (ValueError, TypeError, KeyError) as exc:
+        _session = previous
+        return _json({'valid':False, 'zone_id':zone['id'], 'checks':[
+            {'status':'FAIL', 'check':'Zone route could not be generated', 'detail':str(exc)}]})
+    except Exception:
+        _session = previous
+        raise
 
 def optimize_routes(config_json):
     from design_actions import optimize_routes as optimize
@@ -65,8 +119,9 @@ def preview(config_json):
     from verify import run
     verification = run(graph, config, profile)
     graph['metadata']['verification'] = verification['summary']
+    graph['metadata']['blocking_findings'] = verification['blocking_failures']
     canonical = asdict(config)
-    digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    digest = canonical_digest(canonical)
     graph['metadata']['config_hash'] = digest
     graph['metadata']['config'] = canonical
     blocked = verification['summary'].get('blocking_failures', 0)

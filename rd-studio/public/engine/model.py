@@ -3,6 +3,19 @@ from dataclasses import dataclass, asdict, field
 from typing import Any
 import standards
 
+def canonical_digest(value):
+    """Stable across browser JSON round trips (for example 0.0 becomes 0)."""
+    import hashlib, json
+    def normalized(item):
+        if isinstance(item, dict):
+            return {key: normalized(val) for key, val in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [normalized(val) for val in item]
+        if type(item) is float and item.is_integer():
+            return int(item)
+        return item
+    return hashlib.sha256(json.dumps(normalized(value), sort_keys=True, allow_nan=False).encode()).hexdigest()
+
 
 @dataclass
 class Config:
