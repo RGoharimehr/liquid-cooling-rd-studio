@@ -34,6 +34,7 @@ python3 -m venv .venv
 python3 -m pip install -r requirements-dev.txt
 cd liquid_cooling_generator
 python3 -m pytest tests -q
+python3 validate_design.py --all-presets
 cd ../rd-studio
 node scripts/test-agent.mjs
 node scripts/test-finder.mjs
@@ -48,7 +49,7 @@ npm run build
 - [Revit 2027 Windows setup and import](liquid_cooling_generator/revit/README.md)
 - [Sizing basis and formulas](liquid_cooling_generator/SIZING_BASIS.md)
 - [Headless finder architecture](rd-studio/HEADLESS_FINDER.md)
-- [Validation record](liquid_cooling_generator/VALIDATION.md)
+- [Validation record and the independent acceptance harness](liquid_cooling_generator/VALIDATION.md)
 
 This is a concept-layout generator with prescribed-flow pressure estimates. It does not solve hydraulic balance or certify a design. Air coils initially share FWS; warm CDU water may require a separate colder air-cooling loop. Vendor operating-point data remains subject to qualification.
 

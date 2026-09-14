@@ -52,3 +52,45 @@ Official Flownex SE 2025 Release 3 documentation identifies Revit 2026 support. 
 Design actions test three deterministic plant-routing preferences and accept a shorter candidate only after generator checks pass. This is bounded route improvement, not global layout optimization. Sizing remains a prescribed-flow screen rather than a balanced hydraulic or transient network solver.
 
 Air coils share the declared FWS circuit in the current template. Their actual capacity at the entering water/air conditions is unresolved; warm CDU facility water can require a separate colder circuit. Manufacturer hose limits, performance curves, fluid/material compatibility and service requirements require the selected equipment's data. Source guidance does not establish equipment-specific compliance, and the supplied books are not distributed with the site.
+
+## Independent acceptance harness — `validate_design.py`
+
+`python3 -m pytest tests` proves the engine is self-consistent: it calls the
+engine's own functions and compares the answers with recorded expectations. It
+cannot see a wrong formula that both sides share, a term silently dropped from
+an export, or two blocks of one artifact answering the same question
+differently.
+
+`validate_design.py` closes that gap. It imports no calculation code. Every
+number is re-derived from the graph's raw data — node coordinates, routed
+lengths, selected bores, declared fluid properties, declared K values and
+pressure allocations — using the relations written out longhand in
+`SIZING_BASIS.md`, then compared with what the engine reported.
+
+```sh
+python3 validate_design.py --config presets/compact.json --sizing-mode preliminary
+python3 validate_design.py --all-presets --plant-type water_cooled
+python3 validate_design.py --graph outputs/my-design/graph.json      # audit a delivered package
+python3 validate_design.py --config presets/compact.json --sweep     # behavioural probes
+python3 validate_design.py --all-presets --json findings.json        # machine-readable
+```
+
+Exit status is 1 when any check fails, so it drops into CI unchanged.
+
+| Group | What it re-derives |
+| --- | --- |
+| `thermal` | heat ledger closes and counts each load once; `Q = P/(ρ·cp·ΔT)` or the L/min-per-kW basis per service; condenser heat `= P·(1+1/COP)`; declared vs implied ΔT |
+| `continuity` | signed node balance away from declared boundaries; equipment shares sum back to each circuit total |
+| `hydraulic` | `v = 4Q/πD²`, `Re = ρvD/μ`, Colebrook **residual** (not a second call to the same solver), `Δp = f·L/D·ρv²/2`, `Δp = K·ρv²/2`, loss counted once, K referenced to a bore its own flow passes through, velocity limits |
+| `pump` | the path is a closed circuit from pump outlet back to its inlet; reported loss equals the sum of its own edges; `H = Δp/ρg`; `P = Q·Δp/η`; margin applied once; closed loops add no static lift; no single fitting dominates the budget |
+| `valve` | `Kv = Q[m³/h]·√(SG/Δp[bar])`, `Cv(US) = 1.156·Kv` |
+| `catalogue` | selected ID `= (OD − 2·wall)` from the named standard; the recommendation is the smallest bore meeting the limit and no larger; nothing is capped at the biggest size and marked passing |
+| `geometry` | routed length equals the node-to-node distance; every straight pipe is axis aligned; losses use routed lengths, not the 1 m placeholder |
+| `agreement` | two blocks of one artifact give one answer: `graph.hydraulics` vs `preliminary_sizing`, applied edge bores vs the calculated selection, `BOM.csv` columns vs the sizing that produced them |
+| `redundancy` | every requested outage combination is enumerated and connectivity checked; an outage duty is never divided by installed units; an unavailable pod produces a blocking finding |
+| `sweep` | doubling load doubles prescribed flow; halving ΔT doubles heat-balance flow; a looser velocity limit never grows a pipe; at a fixed bore head responds to flow, and the friction share of the pump budget is reported |
+
+What it does **not** do: it takes velocity caps, fitting K values, equipment
+pressure allocations, fluid properties and efficiencies as declared project
+assumptions and only checks that the engine applied them consistently. It does
+not balance the network, intersect a pump curve, or certify anything.

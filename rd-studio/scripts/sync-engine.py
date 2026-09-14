@@ -9,7 +9,7 @@ from verify import run as verify_run
 from model import Config
 names=[]
 for p in engine.glob('*.py'):
-    if p.name in ('report.py','run.py'):continue
+    if p.name in ('report.py','run.py','validate_design.py'):continue
     target=public/'engine'/p.name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(p.name)
 for p in (engine/'datacenter_equipment_finder').rglob('*.py'):
     rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(str(rel))
