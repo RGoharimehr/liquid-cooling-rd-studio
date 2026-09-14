@@ -98,6 +98,12 @@ def catalog():
             field['nominal_options']={name:[row[0] for row in values[0]] for name,values in CATALOGUES.items()}
             field.update(min=1,max=24)
         if key=='valve_design_dp_kPa':field['min']=.01
+        if key in ('cdu_nominal_flow_L_min','cdu_rated_capacity_kW'):
+            field['group']='CDUs'
+            field['label']={'cdu_nominal_flow_L_min':'CDU nominal secondary flow','cdu_rated_capacity_kW':'CDU rated capacity'}[key]
+            field['unit']={'cdu_nominal_flow_L_min':'L/min','cdu_rated_capacity_kW':'kW'}[key]
+            field.update(min=0,max=100000 if key.endswith('_kW') else 20000,step=10)
+            field['source']={'title':'Selected CDU published data','edition':'Manufacturer selection table','clause':'Nominal flowrate and rated cooling capacity','status':'vendor_requirement','applicability':'Acceptance limits for the CDU capacity screen','url':'','note':'The flow and duty the selected unit is published to carry, at the rating condition that matches this design. The screen reports whether the required head, flow and capacity all fit; any one short and the unit does not suit. Zero leaves that check unassigned.'}
         if key=='cdu_available_head_kPa':
             field['label']='CDU available secondary head'
             field['source']={'title':'Selected CDU published data','edition':'Manufacturer selection table','clause':'Nominal available pump head pressure','status':'vendor_requirement','applicability':'Acceptance limit for the TCS circuit pressure screen','url':'','note':'The head the selected CDU offers to the technology-cooling loop, from its own published data. The circuit screen is checked against this instead of a reference unit. Zero leaves the check on the reference figure. This is not the CDU internal pressure drop; that is cdu_design_dp_kPa.'}
@@ -124,8 +130,10 @@ PRESETS={
   # supply and return collectors at py+4 and py+6 at the same elevation, which
   # its own clearance check correctly rejects. Until the bank geometry is fixed
   # the preset carries two per bank; see references/benchmarks/rd113_r1.json.
-  # Motivair MCDU-70 selection table: nominal available pump head 38 psi.
-  'cdu_available_head_kPa':262.,
+  # Motivair MCDU-70 selection table: 38 psi available head, 991 GPM nominal
+  # secondary flow, 2500 kW at primary 105.8 F / secondary PG25 113 F - which is
+  # this design's own FWS 40 C and TCS 45 C.
+  'cdu_available_head_kPa':262.,'cdu_nominal_flow_L_min':3750.,'cdu_rated_capacity_kW':2500.,
   'air_unit_count':4,'chiller_count':2,'chiller_spares':1,'tower_count':6,'tower_spares':1,
   'fws_pump_count':2,'fws_pump_spares':1,'cws_pump_count':2,'cws_pump_spares':1,
   # R0 p4/p9: compute 96% liquid, TCS 45/55 C, FWS 40/50 C. The preset carried

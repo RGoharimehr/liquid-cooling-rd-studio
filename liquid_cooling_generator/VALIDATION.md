@@ -321,3 +321,64 @@ default it carried the generic bores — a 10 in FWS main at **6.08 m/s** and 13
 velocity exceedances across the design, because those defaults belong to a 4 MW
 hall and RD113 is an 11.5 MW one.
 
+### The CDU is a source on one side and a resistance on the other
+
+The TCS pump screen was adding the CDU's declared equipment drop to the very
+circuit the CDU's own pumps drive:
+
+```
+internal   = allocations['cdu_secondary']          # 50 kPa
+friction_dp = path['passive_dp_Pa'] + internal
+```
+
+That counts the unit's losses twice. A manufacturer publishes **available head
+at the connections**, already net of everything inside the unit — the MCDU-70's
+38 psi is what is left for the loop, not a figure to subtract from. The two
+sides of a CDU are not symmetric:
+
+| Side | What the CDU is | Who overcomes the loss |
+| --- | --- | --- |
+| Primary / facility | a resistance | the facility pumps, so the primary side keeps its declared equipment drop |
+| Secondary / technology | the pump | nobody — its published head is already net, so the circuit is charged nothing |
+
+`cdu_secondary` is now allocated zero loss, and the TCS circuit head is the
+routed path alone. On RD113 that takes the required head from **246.7 kPa to
+189.2 kPa (35.8 → 27.4 psi)**, against 262 kPa available — a margin of 27.8 %
+rather than 5.9 %. The 5.9 % figure reported earlier was wrong, and wrong in the
+pessimistic direction.
+
+`validate_design.py` now fails any design whose circuit is charged for the
+internal loss of its own source, so the class cannot come back.
+
+### Selecting a CDU: enough head, enough flow, enough capacity — or not
+
+Selection is a three-way capacity question with no partial credit and no trade
+between the three. `preliminary_sizing` emits a `cdu_selection` block per unit,
+checked against the published rating carried by three project inputs —
+`cdu_available_head_kPa`, `cdu_nominal_flow_L_min`, `cdu_rated_capacity_kW`.
+Any one short raises `CDU_RATING_EXCEEDED`.
+
+For RD113 with the MCDU-70's published figures:
+
+| | Required | Published | |
+| --- | --- | --- | --- |
+| Secondary head | 189.2 kPa | 262 kPa | sufficient, +27.8 % |
+| Secondary flow | 4334 L/min | 3750 L/min | **short, −15.6 %** |
+| Thermal capacity | 2888 kW | 2500 kW | **short, −15.5 %** |
+
+Flow and capacity are short by the same fraction, which is the consistency check
+passing: they are one duty at a fixed temperature rise. The shortfall is the
+per-pod worst case — both requested outages in one pod, two of four units
+carrying it — against RD113's six-of-eight allocation across one loop. Under the
+generator's own independence assumption the MCDU-70 does not suit; that is a
+finding to settle with Schneider, not a number to soften.
+
+### One preset definition, two entry points
+
+`presets/*.json` drives the CLI and `parameters.PRESETS` drives the studio. The
+RD113 file had stayed on the R0 revision while the studio preset moved to R1, so
+`run.py --config presets/rd113.json` and the studio's RD113 button built
+different designs — different temperatures, a different flow basis, a different
+FWS class. The files are regenerated from `parameters.PRESETS` and a test now
+fails if they drift again.
+

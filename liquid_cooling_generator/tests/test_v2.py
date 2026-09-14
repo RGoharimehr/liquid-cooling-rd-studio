@@ -83,3 +83,15 @@ class ContractV2Tests(unittest.TestCase):
   with self.assertRaises(ValueError):web_api.preview(json.dumps({**self.c.__dict__,'rows':0}))
   self.assertEqual(json.loads(web_api.export_file('graph.json',result['config_hash']))['config_hash'],result['config_hash'])
 if __name__=='__main__':unittest.main()
+
+class PresetFileTests(unittest.TestCase):
+ def test_cli_preset_files_match_the_studio_presets(self):
+  """One preset definition, two entry points. The CLI files drifted to an
+  earlier RD113 revision while the studio preset moved on, so `run.py --config
+  presets/rd113.json` and the studio's RD113 button built different designs."""
+  from dataclasses import asdict
+  for name,preset in PRESETS.items():
+   with self.subTest(name=name):
+    disk=json.loads((Path(__file__).resolve().parents[1]/'presets'/f'{name}.json').read_text())
+    self.assertEqual(asdict(Config.from_dict(disk)),asdict(Config.from_dict(dict(preset['config']))),
+                     f'presets/{name}.json has drifted from parameters.PRESETS[{name!r}]')

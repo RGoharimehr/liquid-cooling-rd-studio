@@ -305,6 +305,11 @@ def check_hydraulics(graph, report):
         reference = row.get('K_reference_id_m')
         if not reference or not row['loss_K']:
             continue
+        # Only a reference bore that differs from the edge's own is a candidate
+        # for this fault. When they are the same the velocity is simply high, and
+        # that is the manual-mode exceedance finding, reported separately.
+        if abs(reference - row['selected_size']['id_m']) < 1e-9:
+            continue
         reference_velocity = 4 * row['design_flow_m3_s'] / (math.pi * reference ** 2)
         if reference_velocity > 2 * row['velocity_cap_m_s']:
             implausible.append((round(reference_velocity, 1), row['edge_id'],
@@ -312,8 +317,8 @@ def check_hydraulics(graph, report):
     implausible.sort(reverse=True)
     report.add('hydraulic', 'every fitting K is referenced to a bore its own flow passes through',
                not implausible, implausible[:3], [],
-               'reference velocity > 2x the family limit means the flow and the bore come from '
-               'different pipe families; the resulting loss is not physical')
+               'a K referenced to a bore the edge itself does not have, at more than twice the '
+               'family limit, means the flow and the bore came from different pipe families')
 
     over = [r for r in estimates if r['velocity_m_s'] > r['velocity_cap_m_s'] + 1e-9]
     flagged = {u.get('edge_id') for u in sizing.get('unresolved', [])
@@ -401,6 +406,24 @@ def check_paths_and_pumps(graph, report):
                'A duty estimated on a path that does not return to the pump is not a circuit.')
     report.add('pump', 'head margin is applied once and disclosed',
                margin is not None, margin, 'declared fraction')
+
+    # A CDU's secondary side is the pump for that loop. Published available head
+    # is net at the connections, so charging the loop for the unit's own internal
+    # drop counts its losses twice.
+    doubled = [s['component_id'] for s in screens
+               if str(s.get('circuit_id', '')).startswith('TCS') and (s.get('internal_cdu_dp_Pa') or 0) > 0]
+    report.add('pump', 'no circuit is charged for the internal loss of its own source',
+               not doubled, doubled[:3], [],
+               'the CDU secondary side drives the TCS loop; its published head already nets its internals')
+
+    # Enough head, enough flow, enough capacity - or the unit does not suit.
+    for item in sizing.get('cdu_selection', []):
+        short = [r for r in item['checks'] if r['status'] == 'SHORT']
+        report.add('pump', f"{item['component_id']}: selected CDU covers the required duty",
+                   not short, [r['quantity'] for r in short] or 'head, flow and capacity all within rating',
+                   'no shortfall',
+                   'a shortfall is a real finding, not a tolerance: size up, add units, or reduce the outage requirement',
+                   severity='warn' if short else 'fail')
 
     # One fitting worth a third of a circuit's head is a modelling artefact far
     # more often than it is a real component.

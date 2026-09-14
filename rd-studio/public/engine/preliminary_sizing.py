@@ -242,9 +242,14 @@ def evaluate(graph, config, *, use_applied_sizes=False):
     margin = _number(config, 'pump_head_margin_fraction', .15, nonnegative=True)
     fluids = _fluid_inputs(config)
     valve_dp = _number(config, 'valve_design_dp_kPa', 20., positive=True) * 1000
+    # A CDU's primary side is a resistance the facility pumps push through, so it
+    # carries the declared equipment drop. Its secondary side is the pump: the
+    # manufacturer publishes available head at the connections, already net of
+    # everything inside the unit, so adding an internal drop to the loop those
+    # pumps drive would count the unit's own losses twice.
     allocations = {'rack_load': _number(config, 'rack_design_dp_kPa', 30., nonnegative=True) * 1000,
                    'cdu_primary': _number(config, 'cdu_design_dp_kPa', 50., nonnegative=True) * 1000,
-                   'cdu_secondary': _number(config, 'cdu_design_dp_kPa', 50., nonnegative=True) * 1000,
+                   'cdu_secondary': 0.,
                    'chiller_evaporator': _number(config, 'chiller_design_dp_kPa', 50., nonnegative=True) * 1000,
                    'chiller_condenser': _number(config, 'chiller_design_dp_kPa', 50., nonnegative=True) * 1000,
                    'balancing_valve': valve_dp, 'control_valve': valve_dp,
@@ -514,8 +519,9 @@ def evaluate(graph, config, *, use_applied_sizes=False):
                     'basis': 'Maximum directed passive route with prescribed sharing and independent design-flow envelopes; branch balancing and pump curves not solved.', **path}
             if path['status'] != 'NOT_EVALUABLE':
                 fluid = fluids[service]; flow = duty_flows.get((pump['component_id'], service), abs(signed.get(pump['id'], 0.)))
-                internal = allocations['cdu_secondary'] if service == 'TCS' else 0.
-                friction_dp = path['passive_dp_Pa'] + internal
+                # Nothing internal to the CDU is added here; see the allocations note.
+                internal = 0.
+                friction_dp = path['passive_dp_Pa']
                 static_dp = 0.; static_status = 'Closed-loop elevation cancels; fill pressure, NPSH and expansion remain unassigned'
                 complete = True
                 if service == 'CWS':
@@ -542,6 +548,9 @@ def evaluate(graph, config, *, use_applied_sizes=False):
                 item.update(status='SCREENING_ESTIMATE' if complete else 'INCOMPLETE_LOWER_BOUND',
                     design_flow_m3_s=flow, passive_dp_Pa=path['passive_dp_Pa'], internal_cdu_dp_Pa=internal,
                     static_dp_Pa=static_dp, static_head_basis=static_status, head_margin_fraction=margin,
+                    internal_cdu_dp_basis=('Zero by definition on the secondary side: published CDU available head '
+                        'is measured at the connections, net of the unit. The primary side carries its declared '
+                        'equipment drop instead, because the facility pumps push through it.'),
                     pump_dp_Pa=dp, pump_head_m=dp / (fluid['rho_kg_m3'] * G), hydraulic_power_W=flow * dp,
                     estimated_input_power_W=flow * dp / efficiency, efficiency=efficiency,
                     efficiency_basis='Assumed overall wire-to-water efficiency; use a matching efficiency when interpreting input power')
@@ -549,6 +558,43 @@ def evaluate(graph, config, *, use_applied_sizes=False):
                     item.update(status='INCOMPLETE_OUTAGE_COVERAGE',
                         outage_limitation='Surviving-unit screen only. A requested outage isolates the entire pod; no pump duty can serve that disconnected case.')
             pumps.append(item)
+    # Selecting a CDU is a three-way capacity question, not a pressure-drop one.
+    # Its secondary pumps must deliver the circuit flow at the circuit head, and
+    # its exchanger must carry the duty. Any one of the three short and the unit
+    # does not suit; there is no partial credit and no trade between them.
+    limits = {'head_Pa': _number(config, 'cdu_available_head_kPa', 0., nonnegative=True) * 1000,
+              'flow_m3_s': _number(config, 'cdu_nominal_flow_L_min', 0., nonnegative=True) / 60000.,
+              'capacity_W': _number(config, 'cdu_rated_capacity_kW', 0., nonnegative=True) * 1000}
+    screens = {p['component_id']: p for p in pumps if str(p.get('circuit_id', '')).startswith('TCS')}
+    cdu_selection = []
+    for cid, duty in duties.items():
+        if 'duty_TCS_m3_s' not in duty:
+            continue
+        required = {'head_Pa': screens.get(cid, {}).get('pump_dp_Pa'),
+                    'flow_m3_s': duty.get('duty_TCS_m3_s'),
+                    'capacity_W': duty.get('screening_duty_heat_W')}
+        rows = []
+        for key, label in (('head_Pa', 'secondary head'), ('flow_m3_s', 'secondary flow'),
+                           ('capacity_W', 'thermal capacity')):
+            need, have = required[key], limits[key]
+            rows.append({'quantity': label, 'required': need, 'published': have or None,
+                         'margin_fraction': (have - need) / have if have and need is not None else None,
+                         'status': 'UNASSIGNED' if not have else
+                                   'NOT_EVALUABLE' if need is None else
+                                   'SUFFICIENT' if need <= have + 1e-9 else 'SHORT'})
+        states = {row['status'] for row in rows}
+        cdu_selection.append({'component_id': cid, 'pod': duty.get('pod'), 'checks': rows,
+            'status': 'SHORT' if 'SHORT' in states else
+                      'UNRESOLVED' if states & {'UNASSIGNED', 'NOT_EVALUABLE'} else 'SUFFICIENT',
+            'basis': 'Required duty at the screening allocation against the published rating of the selected unit. '
+                     'A sufficient result is a capacity screen, not a selection: approach temperature, fouling, '
+                     'part-load control, pump-curve intersection and NPSH remain vendor review.'})
+    for item in cdu_selection:
+        if item['status'] == 'SHORT':
+            short = ', '.join(r['quantity'] for r in item['checks'] if r['status'] == 'SHORT')
+            warnings.append({'code': 'CDU_RATING_EXCEEDED', 'component_id': item['component_id'],
+                'detail': f'The selected CDU is short on {short} at this design duty. Raise the unit size, '
+                          f'add units to the pod, or reduce the requested simultaneous outages.'})
     unresolved = pending + warnings
     suggested_config = {}
     for family in families.values():
@@ -569,7 +615,8 @@ def evaluate(graph, config, *, use_applied_sizes=False):
                 'effective_TCS_delta_K': total_heat / (fluids['TCS']['rho_kg_m3'] * fluids['TCS']['cp_J_kg_K'] * sum(flow_by_pod.values())) if sum(flow_by_pod.values()) else None},
             'suggested_config': suggested_config,
             'size_families': list(families.values()), 'edge_estimates': list(estimates.values()),
-            'pump_screens': pumps, 'valve_capacities': valves, 'unresolved': unresolved,
+            'pump_screens': pumps, 'valve_capacities': valves, 'cdu_selection': cdu_selection,
+            'unresolved': unresolved,
             'assumptions': {'K_by_kind': k_values, 'allocated_dp_Pa_by_kind': allocations,
                 'K_reference': 'Selected local bore; reducer uses smaller connected bore',
                 'flow_sharing': 'All modeled units share equally within their assigned pod or plant bank; installed spare units are included in all-online flows',

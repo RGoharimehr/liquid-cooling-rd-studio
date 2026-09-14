@@ -14,7 +14,12 @@
   "expected": [
     { "id": "tcs_head_psi", "quantity": "pump.CDU-01.dp_kPa", "published": 262, "unit": "kPa (38 psi)",
       "comparison": "at_most", "tolerance": 0,
-      "evidence": "MCDU-70 nominal available pump head pressure 38 psi. The generated TCS circuit must live inside the head the selected unit actually offers." },
+      "evidence": "MCDU-70 nominal available pump head pressure 38 psi, which is net at the connections. The generated TCS circuit must live inside the head the selected unit actually offers, and nothing internal to the unit is added to that circuit." },
+
+    { "id": "secondary_flow_rating", "quantity": "duty.CDU-01.TCS_L_min", "published": 3750, "unit": "L/min (991 GPM)",
+      "comparison": "at_most", "tolerance": 0,
+      "evidence": "MCDU-70 nominal secondary flowrate 991 GPM. The unit's own pumps must deliver the circuit flow; this is a rating, not a target.",
+      "adjudication": "SHORT by 15.6 percent at the screening duty. The generator's worst case puts both requested outages in one pod, leaving two of four units to carry it, so each must pass 4334 L/min against the 3750 the MCDU-70 is rated for. RD113 allocates across six of eight on one loop instead. Under the generator's own per-pod assumption the selected unit does not suit; that is a genuine finding and is reported as CDU_RATING_EXCEEDED." },
 
     { "id": "cdu_capacity_kW", "quantity": "duty.CDU-01.all_online_heat_kW", "published": 2500, "unit": "kW",
       "tolerance": 0.02,
