@@ -7,8 +7,14 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "dev:stop": "node scripts/dev-stop.mjs",
+    "dev:restart": "node scripts/dev-stop.mjs && vinext dev",
+    "sync": "python3 scripts/sync-engine.py",
+    "doctor": "node scripts/doctor.mjs",
+    "prebuild": "python3 scripts/sync-engine.py",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
+    "verify": "node scripts/doctor.mjs && npm exec tsc -- --noEmit && node scripts/test-agent.mjs && node scripts/test-finder.mjs && node scripts/test-zone-interaction.mjs && node scripts/test-zone-draft.mjs && node scripts/test-engine.mjs",
     "lint": "oxlint",
     "format": "oxfmt"
   },

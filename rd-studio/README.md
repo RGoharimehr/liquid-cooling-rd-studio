@@ -2,10 +2,11 @@
 
 A local-in-browser tuning and geometry workspace for liquid-cooled data-center reference designs. The UI uses React, Three.js and Pyodide. Every design parameter has a source/assumption note. Generation uses the same pure-Python engine as the CLI in the adjacent `liquid_cooling_generator` directory.
 
-- `npm ci` and `npm run dev` start the local interface.
-- `python3 scripts/sync-engine.py` refreshes the shared engine assets and initial model after engine changes.
-- `node scripts/test-engine.mjs` verifies all three presets and their IFC4/PCF/BOM/ZIP outputs inside the browser Python runtime.
-- `npm exec tsc -- --noEmit` and `npm run build` validate the web application.
+- `npm ci` then `npm run dev` start the local interface.
+- `npm run dev:restart` stops whatever is already running and starts again; `npm run dev:stop` also clears the stale lockfile a crashed server leaves behind.
+- `npm run sync` refreshes the shared engine assets and initial model after engine changes. It runs automatically before `npm run build`.
+- `npm run doctor` reports what is broken in this checkout and names the fix. `npm run doctor -- --url <origin>` does the same for a deployment, which is how you tell a stale deployment apart from a code fault.
+- `npm run verify` runs the doctor, the type check and every test the CI studio job runs, including all three presets through the real browser Python runtime.
 
 Select a reference, tune parameters, and arrange the plan before clicking **Apply design**. In Plan, enable Arrange zones; select a cooling pod, network-rack zone or plant, then drag, rotate or flip it as many times as needed. These edits update a lightweight draft only. Equipment moves immediately; faint piping remains the last applied route. **Undo arrangement change** reverses one draft action. Placement conflicts are shown while drafting; Apply checks the complete equipment arrangement, reroutes piping and enables normal exports only when required checks pass. Other equipment/count/coordinate-frame changes must be applied before arranging the regenerated zones. Discard pending changes restores applied inputs.
 

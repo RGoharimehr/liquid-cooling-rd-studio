@@ -11,13 +11,60 @@ Use Node.js 22.13 or newer and Python 3.12 or newer. From this repository:
 ```sh
 cd rd-studio
 npm ci
-python3 scripts/sync-engine.py
+npm run sync          # copy the engine into the browser bundle
 npm run dev
 ```
 
 Open the local address printed by the development server. Choose a starting reference, tune inputs, then click **Apply design**. Pending changes do not replace the applied model or its download identity.
 
 In **Plan → Arrange zones**, select a pod, network zone or plant and move, rotate or flip it. Overlap checks run before staging; Apply reroutes and checks the pipes. **Piping → Preliminary** calculates and rounds commercial sizes. **Design actions → Try shorter plant routes** compares checked alternatives without a language model.
+
+### Restart, stop and diagnose
+
+`vinext dev` holds a lockfile and refuses to start while another server owns it,
+and a closed terminal or a crash leaves that lock behind. These handle both:
+
+```sh
+npm run dev:restart   # stop whatever is running, then start fresh
+npm run dev:stop      # stop it, or clear a stale lock so dev can start again
+npm run doctor        # what is wrong with this checkout
+npm run verify        # doctor, types, and every test the studio job runs
+```
+
+`npm run doctor` checks the things that break the studio silently: engine
+modules absent from the browser manifest, manifest entries with no file behind
+them, browser copies that drifted from the engine sources, an incomplete
+Pyodide runtime, and a dev server or stale lock holding the port. Every failure
+names the command that fixes it. `npm run sync` fixes most of them; it is also
+wired as `prebuild`, so `npm run build` cannot produce a bundle that is behind
+the engine sources.
+
+### When the studio says the engine is incomplete
+
+> This deployment is serving an incomplete design engine (ModuleNotFoundError: No module named 'datacenter_equipment_finder')
+
+The browser assembles the engine from the file list in `/engine/manifest.json`
+and nothing else, so a module is missing from the studio whenever it is missing
+from that list **as served** - which can be true even when the repository is
+complete. Point the doctor at the deployment to tell the two apart:
+
+```sh
+npm run doctor -- --url https://your-studio-host
+```
+
+It compares the served manifest against this checkout's engine modules and
+fetches a few files directly, so it distinguishes a short manifest, a 404 on a
+file the manifest promised, and a host returning an HTML fallback page in place
+of Python. If the local run passes and the `--url` run fails, the code is fine
+and the deployment is stale or incomplete: redeploy from a checkout where
+`npm run doctor` passes.
+
+The selection core is vendored into `liquid_cooling_generator/datacenter_equipment_finder/`
+from [DATA-CENTER-EQUIPMENT-FINDER](https://github.com/RGoharimehr/DATA-CENTER-EQUIPMENT-FINDER);
+see [UPSTREAM.md](liquid_cooling_generator/datacenter_equipment_finder/UPSTREAM.md)
+for the pinned revision. Its catalogue is fetched at search time and is never
+bundled, so an equipment search also needs outbound access to that repository's
+raw content.
 
 ## Use the CLI
 
@@ -42,10 +89,7 @@ python3 validate_design.py --design-space    # what can vary, by studio section
 python3 validate_design.py --config presets/compact.json --matrix   # all 108 geometry variants
 python3 benchmark.py --all                   # against published reference designs
 cd ../rd-studio
-node scripts/test-agent.mjs
-node scripts/test-finder.mjs
-node scripts/test-engine.mjs
-npm exec tsc -- --noEmit
+npm run verify        # doctor, tsc, agent/finder/plan-editor tests, browser worker
 npm run build
 ```
 
