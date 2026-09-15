@@ -41,6 +41,12 @@ def attach_contract(g,c):
         for k in ('primary_ports','secondary_ports'):
             if k in coupling:coupling[k]=[rename.get(p,p) for p in coupling[k]]
     for k in ('fws_source','fws_sink'):g['metadata'][k]=rename.get(g['metadata'].get(k),g['metadata'].get(k))
+    # Declared connection points name nodes too, and a stale name is worse than
+    # none: it reads as a node that exists somewhere else in the contract graph.
+    for rows in g['metadata'].get('connection_points',{}).values():
+        for row in rows if isinstance(rows,list) else []:
+            for k in ('supply_node','return_node'):
+                if k in row:row[k]=rename.get(row[k],row[k])
     for comp in g['components']:
         original=list(comp.get('ports',[]));pts=[nodes[n]['xyz_m'] for n in original];details=[]
         for i,nid in enumerate(original):

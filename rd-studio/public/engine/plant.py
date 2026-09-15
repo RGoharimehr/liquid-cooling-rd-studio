@@ -201,6 +201,16 @@ def add_plant(b):
         [px,py,pz],c.plant_rotation_deg,c.plant_flip_x,c.plant_flip_y)
     # Use a west/south service corridor and approach all open collector ends axially.
     source=b.g['metadata']['fws_source'];sink=b.g['metadata']['fws_sink']
+    # The hall hands over on the side facing the plant, so the service corridor
+    # has to be on that side too: approach the interface from outside it, never
+    # from across the hall.
+    outward=b.g['metadata'].get('fws_interface_dir',[0,1,0])
+    oy=1 if outward[1]>=0 else -1
+    south_edge=min(n['route_hint_m'][1] for n in b.g['nodes'][begin_nodes:])
+    def lane(node_y,gap):
+        # The corridor sits beyond the interface approach point, or the run
+        # doubles back on itself, and beyond the plant, or it runs through it.
+        return max(node_y+gap,py+8+gap) if oy>0 else min(node_y-gap,south_edge+2-gap)
     def boundary_lane(a,d,start_dir,end_dir,lane_y):
         aa=b.xyz(a);dd=b.xyz(d);lead=2
         ap=[aa[k]+start_dir[k]*lead for k in range(3)]
@@ -210,16 +220,20 @@ def add_plant(b):
             high=max(zr,aa[2],dd[2])+3+(1 if a==sink else 0)
             return [ap,[ap[0],ap[1],high],[dp[0],ap[1],high],[dp[0],dp[1],high],dp]
         detour=px+(c.chiller_count-1)*c.plant_equipment_pitch_m+5 if abs(start_dir[1])>.5 and start_dir[1]<0 else ap[0]
+        # The detour exists to clear the chiller bank. A start already east of it
+        # needs no sidestep, and one shorter than the bends it would take is not a
+        # route at all.
+        if abs(detour-ap[0])<3*c.bend_radius_m:detour=ap[0]
         travel_z=ap[2]+1.2 if c.plant_type=='water_cooled' and start_dir[1]<0 else ap[2]
         return [ap,[ap[0],ap[1],travel_z],[detour,ap[1],travel_z],[detour,lane_y,travel_z],[dp[0],lane_y,travel_z],[dp[0],lane_y,dp[2]],dp]
     # Outward direction at the first Y collector is -Y, at first X collector -X.
     pdir=transform_zone_vector([0,-1,0],spec);rdir=transform_zone_vector([-1,0,0],spec)
     # Supply first: the return then prices its corridor and follows it onto one
     # rack instead of opening a second.
-    emit([('FWS-plant-supply',po,source,tuple(pdir),(0,1,0),
-           boundary_lane(po,source,pdir,[0,1,0],max(b.xyz(source)[1]+4,py+12))),
-          ('FWS-plant-return',sink,r,(0,1,0),tuple(rdir),
-           boundary_lane(sink,r,[0,1,0],rdir,max(b.xyz(sink)[1]+6,py+14)))],'FWS')
+    emit([('FWS-plant-supply',po,source,tuple(pdir),(0,oy,0),
+           boundary_lane(po,source,pdir,[0,oy,0],lane(b.xyz(source)[1],4))),
+          ('FWS-plant-return',sink,r,(0,oy,0),tuple(rdir),
+           boundary_lane(sink,r,[0,oy,0],rdir,lane(b.xyz(sink)[1],6)))],'FWS')
     for comp in b.g['components'][begin_components:]:comp['zone']='plant'
     b.g['metadata']['plant']={'type':c.plant_type,'pumping':'variable_primary','equipment_ids':[x['id'] for x in equipment],
         'capacity_status':'NOT_EVALUABLE: manufacturer ratings and minimum-flow controls unassigned'}

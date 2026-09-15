@@ -51,8 +51,23 @@ def add_air_cooling(b):
     sy=north;ry=north+2;uy=north+5
     z=max(source_pt[2],3.6);zr=max(sink_pt[2],z+c.return_elevation_offset_m)
     arm=c.fitting_arm_m
+    def spine(start,bx,lead,y,height,split):
+        """Carry an open FWS trunk end into the air-unit strip.
+
+        Two metres east of the trunk keeps the run clear of the collector it just
+        left and still west of the TCS headers at x=0, so it crosses neither.
+        `lead` is how far the run continues along the trunk before turning east;
+        that turn and its straight lead have to belong to one route, because an
+        elbow is only built where a single route makes the corner.
+        """
+        sx,oy,sh=b.xyz(start);ly=oy+lead
+        end=b.node([bx+.6,y,height],'FWS')
+        legs=[[sx,ly,sh],[bx,ly,sh],[bx,ly,height],[bx,y,height]]
+        if split:b.route_path(start,end,legs,'FWS','main',basis,group)
+        else:b.route_path(end,start,legs[::-1],'FWS','main',basis,group)
+        return end
     def hub(old,y,height,split):
-        """Tee the air branch off the facility interface where the interface is.
+        """Tee the air branch off the facility interface, north of the interface.
 
         This used to put the tee on the north wall and hand back its common port
         as the new fws_source, so the whole facility's connection point moved to
@@ -61,23 +76,25 @@ def add_air_cooling(b):
         18,571 L/min of it - ran north and back to reach it.
 
         The tee now sits beside the existing interface and only the air branch,
-        which carries 489 L/min, travels to the wall.
+        which carries 489 L/min, travels to the wall. It is reached only when the
+        interface is itself at the north end of the trunk, beside the air units;
+        a south-facing interface hands over an open trunk end up here instead.
         """
         x,oy,_=b.xyz(old)
         common,other,branch=b.junction([x,oy+2*arm,height],[0,-1,0],[1,0,0],'FWS','main',[basis,basis],group,split=split)
         if split:b.route_path(other,old,[[x,oy,height]],'FWS','main',basis,group)
         else:b.route_path(old,other,[[x,oy,height]],'FWS','main',basis,group)
-        # The tee's branch port faces east, the wall is north and the spine then
-        # runs east again, so the branch needs both turns as explicit elbows and
-        # has to clear the interface riser it just left.
-        bx=x+2.
-        spine=b.node([bx+.6,y,height],'FWS')
-        legs=[[bx,oy+2*arm,height],[bx,y,height]]
-        if split:b.route_path(branch,spine,legs,'FWS','main',basis,group)
-        else:b.route_path(spine,branch,legs[::-1],'FWS','main',basis,group)
-        return common,spine
-    new_source,supply=hub(source,sy,z,True);new_sink,ret=hub(sink,ry,zr,False)
-    b.g['metadata'].update(fws_source=new_source,fws_sink=new_sink)
+        return common,spine(branch,x+2.,0.,y,height,split)
+    # The trunk already ends beside the air units when the interface faces the
+    # other way; tapping it there beats teeing at the interface and coming back.
+    tapped=b.g['metadata'].pop('fws_air_tap',None)
+    if tapped:
+        run=tapped['run_out_m']
+        supply=spine(tapped['supply'],b.xyz(tapped['supply'])[0]+2.,run,sy,z,True)
+        ret=spine(tapped['return'],b.xyz(tapped['return'])[0]+2.,run,ry,zr,False)
+    else:
+        new_source,supply=hub(source,sy,z,True);new_sink,ret=hub(sink,ry,zr,False)
+        b.g['metadata'].update(fws_source=new_source,fws_sink=new_sink)
     first_x=max(c.first_rack_x_m, source_pt[0]+4, sink_pt[0]+4)
     equipment=[]
     def branch(start,x,y,height,unit_port,incoming):

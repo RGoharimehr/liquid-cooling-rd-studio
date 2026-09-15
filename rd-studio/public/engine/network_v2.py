@@ -11,6 +11,29 @@ from topology import Builder
 def assignments(count,pods,explicit):
     return explicit or [min(pods, i*pods//count+1) for i in range(count)]
 
+def assign_connections(zones,points):
+    """Send each zone to the nearest facility point that can still take all of it.
+
+    Nearest first, then spill-over: a zone whose closest point has no capacity
+    left for its whole flow goes to the next closest that has. A zone is never
+    split between two points, because it has one pair of connection ports and
+    half its duty cannot arrive from somewhere else.
+    """
+    free={p['id']:p.get('capacity_m3_s') for p in points}
+    rows=[]
+    for zone in zones:
+        ranked=sorted(points,key=lambda p:(dist(zone['point_m'],p['point_m']),p['id']))
+        flow=zone.get('flow_m3_s') or 0.
+        fits=[(rank,p) for rank,p in enumerate(ranked) if free[p['id']] is None or free[p['id']]+1e-9>=flow]
+        rank,point=fits[0] if fits else (0,ranked[0])
+        if free[point['id']] is not None:free[point['id']]-=flow
+        row={'zone':zone['id'],'connection_point':point['id'],'flow_m3_s':flow,
+             'distance_m':round(dist(zone['point_m'],point['point_m']),3)}
+        if not fits:row['status']='OVERSUBSCRIBED: no declared facility connection point has capacity for this zone'
+        elif rank:row['status']='SPILLED: the nearest facility connection point had no spare capacity'
+        rows.append(row)
+    return rows
+
 class NetworkBuilder(Builder):
     def __init__(self,c,profile):
         super().__init__(c,profile)
@@ -63,36 +86,103 @@ class NetworkBuilder(Builder):
             if abs(p[axis]-target[axis])>1e-8:p=p.copy();p[axis]=target[axis];points.append(p)
         self.route_path(a,b,points[:-1],service,level,basis,group)
 
+    def facility_interface(self):
+        """Fix which end of the hall hands over to the facility, before any pipe.
+
+        The FWS collector used to leave the hall at its north end whatever else
+        was there. On RD113 - plant at y=-16, pod 1 sitting beside it at
+        y=-16..-10 - that sent every circuit north to y=+1.7 and the plant then
+        reached back the length of the hall to meet it. The interface now sits at
+        whichever end of the CDU line faces the plant, and the collector is
+        ordered to leave on that side, so no pod starts by travelling away from
+        the plant it is trying to reach.
+
+        The interface only moves to the plant's side when the service corridor on
+        that side is clear. A water-cooled plant puts its condenser banks, towers
+        and condenser pumps south of the chillers, and the plant's own FWS ends
+        face west and north, so the run would have to cross that circuit to reach
+        a south interface. Those designs, and boundary designs with no plant to
+        face at all, keep the north corridor until the plant can declare a
+        hall-facing connection point of its own.
+        """
+        c=self.c;ys=[self.layout['cdu_origin_m'][1]+(i-1)*c.cdu_pitch_m for i in range(1,c.cdu_count+1)]
+        lo,hi=min(ys),max(ys)
+        if c.plant_type=='air_cooled' and c.plant_origin_y_m<(lo+hi)/2:return lo-2.,-1
+        return max(1.,hi+2.),1
+
     def collectors(self):
         c=self.c;z=c.header_elevation_m;zr=z+c.return_elevation_offset_m
         allports={i:{} for i in range(1,c.cdu_count+1)};ends={}
+        interface_y,outward=self.facility_interface()
+        cdu_y=lambda i:self.layout['cdu_origin_m'][1]+(i-1)*c.cdu_pitch_m
+        from air_cooling import heat_ledger
+        # Carry the far end of the trunk two metres clear only when the air units
+        # need it: they sit north of the hall, so when the interface faces south
+        # they tap the trunk end beside them instead of running a branch the
+        # length of the hall past every CDU takeoff.
+        air_tap=outward<0 and heat_ledger(c)['air_W']>1e-9
+        joins={};tap={}
         for service in ('FWS','TCS'):
             for pod in (range(1,c.pod_count+1) if service=='TCS' else [0]):
                 self.current_pod=pod or 1
                 units=[i for i in allports if service=='FWS' or self.cdus[i-1]==pod]
+                # One shared corridor, ordered so its open end is the one facing
+                # the facility rather than whichever CDU is numbered first.
+                if service=='FWS':units=sorted(units,key=lambda i:outward*cdu_y(i))
                 previous={}
                 offset=(pod-1)*c.pod_elevation_spacing_m if pod else 0
                 for position,i in enumerate(units):
-                    y=self.layout['cdu_origin_m'][1]+(i-1)*c.cdu_pitch_m
+                    y=cdu_y(i)
                     for label,x,zz,split in ([('ts',0,z+offset,False),('tr',-.65,zr+offset,True)] if service=='TCS' else [('fs',-8,z,True),('fr',-8.65,zr,False)]):
-                        common,other,branch=self.junction([x,y,zz],[0,-1,0],[-1,0,0] if service=='TCS' else [1,0,0],service,'main',[self.fixed(0),self.fixed(0)],(None,None,None),split=split,last=position==0)
+                        axis=[0,-1,0] if service=='TCS' else [0,-outward,0]
+                        common,other,branch=self.junction([x,y,zz],axis,[-1,0,0] if service=='TCS' else [1,0,0],service,'main',[self.fixed(0),self.fixed(0)],(None,None,None),split=split,last=position==0 and not (service=='FWS' and air_tap))
                         if position:
                             if split:self.route(other,previous[label],service,'main',self.fixed(0),(None,None,None))
                             else:self.route(previous[label],other,service,'main',self.fixed(0),(None,None,None))
+                        elif other is not None:tap[label]=other
                         previous[label]=common;allports[i][label]=branch
+                        if service=='FWS':joins.setdefault(self.cdus[i-1],{})[label]=common
                 ends[pod]=previous if pod else ends.get(pod,{})
                 if service=='FWS':ends[0]=previous
-        # Facility plant interface continues away from the hall in negative Y.
+        # Facility interface: the trunk continues past the last CDU on the side
+        # the plant is on, and both collectors reach it from their open ends.
         fs=ends[0]['fs'];fr=ends[0]['fr']
-        # Collector common ends point toward +Y. Take both to a clear corridor.
-        y=max(1.,self.layout['cdu_origin_m'][1]+(c.cdu_count-1)*c.cdu_pitch_m+2)
-        source=self.node([-8,y,z],'FWS','boundary');sink=self.node([-8.65,y,zr],'FWS','boundary')
+        source=self.node([-8,interface_y,z],'FWS','boundary');sink=self.node([-8.65,interface_y,zr],'FWS','boundary')
         self.route(source,fs,'FWS','main',self.fixed(0),(None,None,None));self.route(fr,sink,'FWS','main',self.fixed(0),(None,None,None))
-        self.g['metadata'].update(fws_source=source,fws_sink=sink,cdu_pump_nodes={})
+        self.g['metadata'].update(fws_source=source,fws_sink=sink,cdu_pump_nodes={},fws_interface_dir=[0,outward,0])
+        # An open trunk port, not a routed stub: whoever uses it owns the turn,
+        # and a turn only gets an elbow where one route makes the corner.
+        if tap:self.g['metadata']['fws_air_tap']={'supply':tap['fs'],'return':tap['fr'],'run_out_m':-2.*outward}
+        self.declare_connections(joins,source,sink,outward)
         for i,ports in allports.items():
             self.current_pod=self.cdus[i-1];self.cdu_assembly(i,**ports)
         self.pod_ends={p:ends[p] for p in range(1,c.pod_count+1)}
         return source,sink
+
+    def declare_connections(self,joins,source,sink,outward):
+        """Record where each zone hands over, and which facility point it uses.
+
+        A pod's connection point is the tee where its primary duty joins the
+        facility trunk: upstream of it the piping belongs to the pod, downstream
+        it is shared. Declaring the point is what lets a reviewer see that a pod
+        reaches the plant directly, and it is what the nearest-plant rule ranks.
+        One plant can be declared today, so every pod is assigned to it; the
+        spill-over branch becomes reachable when a second plant can be declared.
+        """
+        c=self.c
+        points=[{'id':'facility-fws','kind':'plant' if c.plant_type!='boundary' else 'boundary',
+                 'label':'Cooling plant' if c.plant_type!='boundary' else 'Facility boundary',
+                 'service':'FWS','supply_node':source,'return_node':sink,
+                 'point_m':[round(v,3) for v in self.xyz(source)],'outward_dir':[0,outward,0],
+                 'capacity_m3_s':self.h['fws_total_m3_s']}]
+        zones=[{'id':f'pod-{pod}','kind':'cooling_pod','pod':pod,'label':f'Cooling pod {pod}','service':'FWS',
+                'supply_node':joins[pod]['fs'],'return_node':joins[pod]['fr'],
+                'point_m':[round(v,3) for v in self.xyz(joins[pod]['fs'])],
+                'flow_m3_s':self.h['fws_cdu_total_m3_s']*self.rows.count(pod)/c.rows} for pod in sorted(joins)]
+        self.g['metadata']['connection_points']={'facility':points,'zones':zones,
+            'assignments':assign_connections(zones,points),
+            'basis':'Each cooling pod joins the facility trunk at its own tee and takes the nearest declared facility connection point with capacity for its whole primary flow.',
+            'scope':'Geometric and flow-capacity assignment only. No pressure, control-valve authority or plant staging check.'}
 
     def cdu_assembly(self,i,ts,tr,fs,fr):
         c=self.c;group=(None,None,i);y=self.layout['cdu_origin_m'][1]+(i-1)*c.cdu_pitch_m

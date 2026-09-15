@@ -12,6 +12,24 @@ The active network_v2 pipeline enumerates all combinations of the requested simu
 
 For the CLI, run `python3 run.py --config presets/compact.json --out outputs/new-design`. The legacy `config.json` preserves an open facility-water boundary until a plant is selected. JSON imports migrate to schema2. Existing output files are staged before replacement; failed export cannot overwrite a previous successful package. `--allow-nonconforming` explicitly permits a draft despite geometry findings; the browser blocks normal import downloads for those designs but offers a labelled diagnostic concept ZIP so editing can continue.
 
+## Connection points
+
+Every cooling pod and the facility declare where they hand over, and
+`metadata.connection_points` records it: the pod's point is the tee at which its
+primary flow joins the facility trunk, the facility's point is the interface the
+plant connects to, and `assignments` says which facility point each pod takes,
+how far away it is and how much flow it brings. A pod takes the nearest declared
+point that still has capacity for its whole flow and spills to the next nearest
+only when the closest one is full, because a pod has one pair of connection ports
+and cannot receive half its duty from somewhere else. One plant can be declared
+today, so every pod is assigned to it.
+
+The trunk leaves the hall at whichever end faces the plant rather than always at
+the north end, so a pod beside the plant reaches it without first running the
+length of the hall. A water-cooled plant keeps the north interface: its condenser
+banks, towers and pumps occupy the south service corridor, and its own FWS ends
+face west and north, so the run would have to cross that circuit.
+
 ## Route optimisation
 
 Routing normally uses deterministic service lanes. `route_optimizer` replaces the
