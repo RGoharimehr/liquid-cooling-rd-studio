@@ -45,7 +45,7 @@ export default function DesignAssistant({open,onOpenChange,config,graph,fields,d
    finish();const r=data.proposal;
    if(latest.current.stamp!==baseStamp||latest.current.graphHash!==baseHash){setError('The design changed during the search. Run it again for the current inputs.');return;}
    const changes=r.status==='IMPROVED'?Object.entries(r.config).filter(([k,v])=>configStamp(v)!==configStamp(base[k])).map(([parameter,value])=>({parameter,value_json:JSON.stringify(value),reason:'Measured shorter plant pipes after generator validation.'})):[];
-   const answer:AgentReply={summary:r.summary+' Plant pipe: '+r.before.plant_pipe_length_m+' → '+r.after.plant_pipe_length_m+' m; elbows: '+r.before.plant_elbows+' → '+r.after.plant_elbows+'.',changes,source_ids:[],qualifications:[r.scope,...r.trials.filter((t:any)=>!t.accepted).map((t:any)=>t.reason||'A candidate was rejected by the geometry checks.')]};
+   const answer:AgentReply={summary:r.summary+' Routed pipe: '+r.before.routed_pipe_length_m+' → '+r.after.routed_pipe_length_m+' m (plant '+r.before.plant_pipe_length_m+' → '+r.after.plant_pipe_length_m+'); elbows: '+r.before.elbows+' → '+r.after.elbows+'.',changes,source_ids:[],qualifications:[r.scope,...r.trials.filter((t:any)=>!t.accepted).map((t:any)=>t.reason||'A candidate was rejected by the geometry checks.')]};
    const proposal=changes.length?proposedConfig(base,changes,fields):null;
    setTurns(old=>[...old.slice(-7),{question:'Find shorter plant piping',answer,stamp:baseStamp,graphHash:baseHash,proposal,...(proposal?{trial:{status:'PASS' as const,findings:[],count:0,compute:graph.components.filter(c=>c.kind==='compute_rack').length,cdus:graph.components.filter(c=>c.kind==='cdu').length,hash:r.config_hash}}:{})}]);setPhase(r.summary);
   };
