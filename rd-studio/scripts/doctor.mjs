@@ -73,14 +73,30 @@ runtime.length
 fs.existsSync('public/catalog.json') ? ok('parameter catalogue is present')
   : bad('public/catalog.json is missing. Run: npm run sync');
 
+// An interrupted `npm ci` leaves node_modules half-deleted. Nothing else here
+// notices, and the failures that follow name the wrong thing: `tsc` reports
+// itself uninstalled, and the sync says the Pyodide runtime is absent.
+const NEEDED = {typescript: 'the type check', pyodide: 'the browser engine test and npm run sync',
+                three: 'the 3D viewer', vinext: 'the dev server and the build'};
+const uninstalled = Object.keys(NEEDED).filter(n => !fs.existsSync(path.join('node_modules', n)));
+uninstalled.length
+  ? bad(`${uninstalled.length} dependenc(y/ies) are not installed: ${uninstalled.map(n => `${n} (${NEEDED[n]})`).join(', ')}\n      Run: npm run dev:stop && npm ci`)
+  : ok('dependencies are installed');
+
 const lockfile = '.vinext/dev/lock.json';
+let devRunning = false;
 if (fs.existsSync(lockfile)) {
   let lock = {}; try { lock = JSON.parse(fs.readFileSync(lockfile,'utf8')); } catch {}
-  let alive = false; try { process.kill(lock.pid, 0); alive = true; } catch {}
-  console.log(alive
+  try { process.kill(lock.pid, 0); devRunning = true; } catch {}
+  console.log(devRunning
     ? `  · a dev server is running: pid ${lock.pid}, ${lock.appUrl || 'port ' + lock.port}. Restart with: npm run dev:restart`
     : `  · a stale dev lockfile is blocking startup. Clear it with: npm run dev:stop`);
 }
+// On Windows the running server holds native .node addons open, and npm ci
+// deletes node_modules before reinstalling it: the unlink fails with EPERM
+// partway through and leaves the tree broken.
+if (devRunning && process.platform === 'win32')
+  console.log('  · stop it before `npm ci`, or the install fails with EPERM on a locked .node file.');
 
 const url = process.argv.includes('--url') ? process.argv[process.argv.indexOf('--url') + 1] : null;
 if (url) {

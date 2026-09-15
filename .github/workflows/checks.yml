@@ -84,7 +84,7 @@ jobs:
           }
 
       - name: Types
-        run: npm exec tsc -- --noEmit
+        run: npm run typecheck
         working-directory: rd-studio
 
       - name: Agent, finder and plan-editor tests

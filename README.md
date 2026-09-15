@@ -19,6 +19,12 @@ npm run sync          # copy the engine into the browser bundle
 npm run dev
 ```
 
+On Windows, stop a running dev server before `npm ci`: it holds native addons
+open, and the install deletes `node_modules` before reinstalling, so it fails
+with `EPERM` on a locked `.node` file and leaves the tree half-deleted. `npm run
+dev:stop` first, and `npm run doctor` will tell you if a previous install was
+interrupted this way.
+
 Open the address the development server prints. Choose a starting reference,
 tune the inputs, then click **Apply design**. Pending changes never replace the
 applied model or its download identity.

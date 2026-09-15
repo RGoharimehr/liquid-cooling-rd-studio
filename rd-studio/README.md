@@ -35,6 +35,22 @@ or was built on a platform whose path separators the list cannot carry.
 **A stale browser engine copy.** `npm run sync` rewrites it. The committed copy
 must match the engine sources, and CI fails if it does not.
 
+**`npm ci` fails with `EPERM: operation not permitted, unlink ...node`
+(Windows).** A running dev server holds native addons open, and `npm ci`
+deletes `node_modules` before reinstalling, so the unlink fails partway through
+and leaves the tree half-deleted. What follows names the wrong thing: `tsc`
+reports itself uninstalled and `npm run sync` says the Pyodide runtime is
+absent. Stop the server first, then reinstall:
+
+```sh
+npm run dev:stop
+npm ci
+npm run doctor
+```
+
+`npm run doctor` reports a half-deleted `node_modules` directly, so you do not
+have to infer it from the next command's error.
+
 ## Using the studio
 
 Select a reference, tune parameters, and arrange the plan before clicking
