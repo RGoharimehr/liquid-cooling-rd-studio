@@ -69,10 +69,13 @@ def collect(graph, config=None):
     flags = defaultdict(list)
     systemic = []
 
-    def add(component_id, code, category, severity, detail, source):
+    def add(component_id, code, category, severity, detail, source, resolved_by=None):
         if component_id in components:
-            flags[component_id].append({'code': code, 'category': category, 'severity': severity,
-                                        'detail': detail, 'source': source})
+            entry = {'code': code, 'category': category, 'severity': severity,
+                     'detail': detail, 'source': source}
+            if resolved_by:
+                entry['resolved_by'] = resolved_by
+            flags[component_id].append(entry)
 
     # A velocity exceedance belongs to the pipe family, not to each of its
     # segments: one nominal size clears every one of them at once.
@@ -153,7 +156,7 @@ def collect(graph, config=None):
         for issue in requirement.get('unresolved', []):
             if issue['code'] in REQUIREMENT_CODES:
                 add(requirement['component_id'], issue['code'], 'missing_information', 'information',
-                    issue['detail'], 'equipment_requirements')
+                    issue['detail'], 'equipment_requirements', issue.get('resolved_by'))
 
     for screen in sizing.get('pump_screens', []):
         if str(screen.get('status', '')).startswith('INCOMPLETE'):
@@ -181,12 +184,16 @@ def collect(graph, config=None):
             # that component's own numbers the same design serialised differently
             # from run to run.
             sample = flags[min(found)]
-            detail, category, severity = next((x['detail'], x['category'], x['severity'])
-                                              for x in sample if x['code'] == code)
+            item = next(x for x in sample if x['code'] == code)
+            detail, category, severity = item['detail'], item['category'], item['severity']
+            # Where the finding named the input that closes it, say so. "One
+            # project input resolves all of them" is true and useless: a reviewer
+            # looking at a flagged object needs the name of the thing to set.
+            clears_when = item.get('resolved_by') or 'One project input or vendor datum resolves all of them.'
             systemic.append({'code': code, 'category': category, 'severity': severity,
                 'scope': f'every {kind}', 'components': len(found), 'representative': min(found),
                 'component_ids': sorted(found), 'detail': detail,
-                'clears_when': 'One project input or vendor datum resolves all of them.'})
+                'clears_when': clears_when})
     for cid in list(flags):
         flags[cid] = [x for x in flags[cid] if (x['code'], kind_of.get(cid)) not in blanket]
         if not flags[cid]:

@@ -56,8 +56,18 @@ def _temperature(value, name):
     return float(value)
 
 
-def _issue(code, detail):
-    return {'code': code, 'detail': detail}
+def _issue(code, detail, resolved_by=None):
+    """A gap, and where it is closed when that is a specific input.
+
+    `resolved_by` names the parameter or decision that clears this issue. A
+    reviewer looking at a flagged object in the model needs somewhere to go, and
+    a detail string saying what is absent does not say where to supply it. It is
+    left unset wherever the answer is a vendor document rather than a setting.
+    """
+    issue = {'code': code, 'detail': detail}
+    if resolved_by:
+        issue['resolved_by'] = resolved_by
+    return issue
 
 
 def build_requirements(graph, config=None, sizing=None):
@@ -152,7 +162,8 @@ def build_requirements(graph, config=None, sizing=None):
             temperatures = [x for x in (supply, declared_return, estimated_return) if x is not None]
             pressure = _number(config.get(prefix + '_design_pressure_bar'), cid + ' design pressure') or None
             if pressure is None:
-                unresolved.append(_issue('PRESSURE_RATING_UNASSIGNED', circuit + ': maximum design working pressure including fill/static/transient allowances is not supplied. Hydraulic dp is not a pressure rating.'))
+                unresolved.append(_issue('PRESSURE_RATING_UNASSIGNED', circuit + ': maximum design working pressure including fill/static/transient allowances is not supplied. Hydraulic dp is not a pressure rating.',
+                                         'Set ' + prefix + '_design_pressure_bar.'))
             fluid = {'name': 'water / propylene glycol' if service == 'TCS' and config.get('pg_volume_fraction', 0) else 'water',
                      'pg_volume_fraction': config.get('pg_volume_fraction', 0.) if service == 'TCS' else 0.,
                      'cooling_phase': 'single_phase',
@@ -195,7 +206,8 @@ def build_requirements(graph, config=None, sizing=None):
                 'required_approach_K': config.get('tcs_supply_C', 0) - config.get('fws_supply_C', 0),
                 'vendor_performance_map_required': True}
             if duty.get('redundancy_status')=='POD_UNAVAILABLE_IN_REQUESTED_OUTAGE':
-                unresolved.append(_issue('POD_UNAVAILABLE_IN_REQUESTED_OUTAGE','Requested simultaneous outages can isolate every CDU in this pod. Change the CDU count/assignments or the project outage requirement; a larger CDU cannot fix the missing connection.'))
+                unresolved.append(_issue('POD_UNAVAILABLE_IN_REQUESTED_OUTAGE','Requested simultaneous outages can isolate every CDU in this pod. Change the CDU count/assignments or the project outage requirement; a larger CDU cannot fix the missing connection.',
+                                     'Raise cdu_count, change cdu_pod_assignments, or lower the redundancy requirement.'))
         elif kind in ('chiller', 'cooling_tower','air_unit'):
             key = 'FWS_duty_heat_W' if kind in ('chiller','air_unit') else 'CWS_duty_heat_W'
             thermal = {'required_capacity_W': duty.get(key), 'condenser_heat_W': duty.get('CWS_duty_heat_W'),

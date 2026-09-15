@@ -179,3 +179,23 @@ body {
 .canvas-help,.canvas-coordinate{pointer-events:none}
 
 .outage-review{margin:0 0 18px;padding:12px 16px;background:#f8faf7;border:1px solid #d5deda;font-size:12px;line-height:1.5}.outage-review summary{cursor:pointer;font-weight:600}.outage-review p{margin:10px 0;color:#566c63}.outage-table-scroll{overflow:auto;max-height:280px}.outage-review table{border-collapse:collapse;width:100%;text-align:left}.outage-review td,.outage-review th{padding:7px 10px;border-bottom:1px solid #dce4dd}
+
+/* Attention roll-up. The 3D flags say an object needs a look; this says what the
+   finding is and which input clears it. */
+.attention-panel{border-top:1px solid #d7e2d9;margin-top:14px}
+.attention-toggle{display:flex;align-items:center;gap:9px;width:100%;padding:13px 0;font-size:12px;color:#6f8378;text-align:left}
+.attention-chip{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.attention-list{padding-bottom:14px}
+.attention-heading{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8a9b92;margin:10px 0 4px}
+.attention-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid #e3eae3}
+.attention-row>span{margin-top:5px}
+.attention-row>div{flex:1;min-width:0}
+.attention-row strong{display:block;font-size:12px;font-weight:500;color:#41564e}
+.attention-row p{font-size:12px;line-height:1.6;color:#6c8078;margin-top:3px;overflow-wrap:anywhere}
+.attention-fix{color:#2c7264!important}
+.attention-row>button{display:flex;align-items:center;gap:4px;flex-shrink:0;font-size:11px;color:#2c7264;border:1px solid #cddbd3;border-radius:4px;padding:5px 8px;background:#f4f8f4}
+.attention-row>button[aria-pressed=true]{background:#dcebe4;border-color:#a9c9bb}
+.attention-clear{font-size:12px;color:#6f8378;padding:13px 0;border-top:1px solid #d7e2d9;margin-top:14px}
+.card-flag{margin-top:9px;padding-top:8px;border-top:1px solid #e0e8e0}
+.card-flag strong{font-family:inherit;font-size:11px;color:#41564e}
+.card-flag p{font-size:11px;line-height:1.55;color:#6c8078;margin-top:3px}
