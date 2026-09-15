@@ -50,12 +50,32 @@ def add_air_cooling(b):
     north=max(net_y,max(p['route_hint_m'][1] for p in b.g['nodes']))+4
     sy=north;ry=north+2;uy=north+5
     z=max(source_pt[2],3.6);zr=max(sink_pt[2],z+c.return_elevation_offset_m)
+    arm=c.fitting_arm_m
     def hub(old,y,height,split):
-        x=b.xyz(old)[0]
-        common,other,branch=b.junction([x,y,height],[0,-1,0],[1,0,0],'FWS','main',[basis,basis],group,split=split)
-        if split:b.route_path(other,old,[[x,b.xyz(old)[1],height]],'FWS','main',basis,group)
-        else:b.route_path(old,other,[[x,b.xyz(old)[1],height]],'FWS','main',basis,group)
-        return common,branch
+        """Tee the air branch off the facility interface where the interface is.
+
+        This used to put the tee on the north wall and hand back its common port
+        as the new fws_source, so the whole facility's connection point moved to
+        wherever the air units sat. On RD113 that put the interface at y=+20.3
+        while the plant and pod 1 are at y=-16..-10, and every circuit - all
+        18,571 L/min of it - ran north and back to reach it.
+
+        The tee now sits beside the existing interface and only the air branch,
+        which carries 489 L/min, travels to the wall.
+        """
+        x,oy,_=b.xyz(old)
+        common,other,branch=b.junction([x,oy+2*arm,height],[0,-1,0],[1,0,0],'FWS','main',[basis,basis],group,split=split)
+        if split:b.route_path(other,old,[[x,oy,height]],'FWS','main',basis,group)
+        else:b.route_path(old,other,[[x,oy,height]],'FWS','main',basis,group)
+        # The tee's branch port faces east, the wall is north and the spine then
+        # runs east again, so the branch needs both turns as explicit elbows and
+        # has to clear the interface riser it just left.
+        bx=x+2.
+        spine=b.node([bx+.6,y,height],'FWS')
+        legs=[[bx,oy+2*arm,height],[bx,y,height]]
+        if split:b.route_path(branch,spine,legs,'FWS','main',basis,group)
+        else:b.route_path(spine,branch,legs[::-1],'FWS','main',basis,group)
+        return common,spine
     new_source,supply=hub(source,sy,z,True);new_sink,ret=hub(sink,ry,zr,False)
     b.g['metadata'].update(fws_source=new_source,fws_sink=new_sink)
     first_x=max(c.first_rack_x_m, source_pt[0]+4, sink_pt[0]+4)
