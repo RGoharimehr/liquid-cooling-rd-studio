@@ -1,11 +1,16 @@
 // What is wrong with this studio, locally or as deployed.
 //
 // The browser gets the engine as a list of files named in /engine/manifest.json
-// and nothing else. So there are two different ways the finder can be "missing"
-// while the repository is perfectly fine: the committed browser copy can be
-// short, or a deployment can serve fewer files than the repository holds. They
-// look identical in the app - a ModuleNotFoundError in whichever panel reached
-// for the module first - and they have completely different fixes.
+// and nothing else, so a module can be "missing" in three ways that look
+// identical in the app - a ModuleNotFoundError in whichever panel reached for it
+// first - and have completely different fixes:
+//
+//   the committed browser copy is short          -> npm run sync
+//   the deployment serves fewer files than this  -> redeploy
+//   the manifest names files with backslashes    -> re-sync and redeploy
+//
+// The third is the one that fools you: every file is present, every fetch
+// succeeds, and the package still cannot be imported.
 //
 //   node scripts/doctor.mjs                  check this checkout
 //   node scripts/doctor.mjs --url <origin>   also check what a deployment serves
@@ -33,13 +38,20 @@ let manifest = [];
 try { manifest = JSON.parse(fs.readFileSync(path.join(browser, 'manifest.json'), 'utf8')); }
 catch { bad('public/engine/manifest.json is missing or unreadable. Run: npm run sync'); }
 
-const listed = new Set(manifest);
+// A manifest written by a sync on Windows carries backslash separators. The
+// files are all there and the fetches even succeed, but the browser filesystem
+// treats the backslash as part of the name, so the package directory is never
+// created. It presents as a missing module, not as a missing file.
+const windowsPaths = manifest.filter(n => n.includes('\\'));
+if (windowsPaths.length) bad(`${windowsPaths.length} manifest entr(y/ies) use Windows path separators: ${windowsPaths[0]}\n      The browser cannot build a package directory from those. Run: npm run sync (with the current scripts/sync-engine.py)`);
+
+const listed = new Set(manifest.map(n => n.replace(/\\/g, '/')));
 const unlisted = expected.filter(n => !listed.has(n));
 unlisted.length
   ? bad(`${unlisted.length} engine module(s) absent from the browser manifest: ${unlisted.slice(0,6).join(', ')}${unlisted.length>6?'…':''}\n      Run: npm run sync`)
-  : ok(`manifest lists all ${expected.length} engine modules`);
+  : ok(`manifest lists all ${expected.length} engine modules${windowsPaths.length ? ' (but see the separator problem above)' : ''}`);
 
-const absent = manifest.filter(n => !fs.existsSync(path.join(browser, n)));
+const absent = manifest.filter(n => !fs.existsSync(path.join(browser, n.replace(/\\/g, '/'))));
 absent.length
   ? bad(`${absent.length} file(s) named in the manifest are not on disk: ${absent.slice(0,6).join(', ')}${absent.length>6?'…':''}\n      Run: npm run sync`)
   : ok(`all ${manifest.length} manifest files are present on disk`);
@@ -72,6 +84,10 @@ if (fs.existsSync(lockfile)) {
 
 const url = process.argv.includes('--url') ? process.argv[process.argv.indexOf('--url') + 1] : null;
 if (url) {
+  if (!/^https?:\/\//i.test(url)) {
+    console.log(`\nDeployment check skipped: "${url}" is not a URL. Pass the real origin, for example:\n  npm run doctor -- --url https://your-studio-host`);
+    process.exit(failures ? 1 : 0);
+  }
   const origin = url.replace(/\/+$/, '');
   console.log(`\nDeployment at ${origin}`);
   // The deployed page and the deployed engine are separate files. A deployment
@@ -87,7 +103,9 @@ if (url) {
     if (!Array.isArray(served)) {
       bad('/engine/manifest.json did not return a file list. Something else is answering at that address.');
     } else {
-      const servedSet = new Set(served);
+      const servedWindows = served.filter(n => n.includes('\\'));
+      if (servedWindows.length) bad(`the deployed manifest uses Windows path separators (${servedWindows[0]}).\n      It was built by a sync on Windows. Redeploy after running "npm run sync" with the current scripts/sync-engine.py.`);
+      const servedSet = new Set(served.map(n => n.replace(/\\/g, '/')));
       const missing = expected.filter(n => !servedSet.has(n));
       missing.length
         ? bad(`the deployed manifest is short by ${missing.length} module(s): ${missing.slice(0,6).join(', ')}${missing.length>6?'…':''}\n      This is a deployment problem, not a code one. Redeploy from a checkout where "npm run doctor" passes.`)

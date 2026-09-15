@@ -1,8 +1,12 @@
 # Liquid Cooling RD Studio
 
-Parameter-driven reference design for chiller plant → facility water → CDU → aggregate direct-to-chip racks, with CRAH/wall-unit air loads and piping.
+Parameter-driven reference design for chiller plant → facility water → CDU →
+aggregate direct-to-chip racks, with CRAH/wall-unit air loads and piping.
 
-The shared Python graph drives the browser plan/3D model, preliminary sizing, equipment requirements, IFC4, PCF and native Revit handoff source. The equipment finder remains headless and reads its independently maintained catalogue only after RD calculates requirements.
+One shared Python graph drives the browser plan and 3D model, preliminary
+sizing, equipment requirements, IFC4, PCF and the native Revit handoff source.
+The equipment finder stays headless and reads its independently maintained
+catalogue only after RD has calculated the requirements.
 
 ## Start the studio
 
@@ -15,56 +19,74 @@ npm run sync          # copy the engine into the browser bundle
 npm run dev
 ```
 
-Open the local address printed by the development server. Choose a starting reference, tune inputs, then click **Apply design**. Pending changes do not replace the applied model or its download identity.
+Open the address the development server prints. Choose a starting reference,
+tune the inputs, then click **Apply design**. Pending changes never replace the
+applied model or its download identity.
 
-In **Plan → Arrange zones**, select a pod, network zone or plant and move, rotate or flip it. Overlap checks run before staging; Apply reroutes and checks the pipes. **Piping → Preliminary** calculates and rounds commercial sizes. **Design actions → Try shorter plant routes** compares checked alternatives without a language model.
+In **Plan → Arrange zones**, select a pod, network zone or plant and move,
+rotate or flip it. Overlap checks run before staging; Apply reroutes and checks
+the pipes. **Piping → Preliminary** calculates and rounds commercial sizes.
+**Design actions → Try shorter plant routes** compares checked alternatives
+without a language model.
 
 ### Restart, stop and diagnose
-
-`vinext dev` holds a lockfile and refuses to start while another server owns it,
-and a closed terminal or a crash leaves that lock behind. These handle both:
 
 ```sh
 npm run dev:restart   # stop whatever is running, then start fresh
 npm run dev:stop      # stop it, or clear a stale lock so dev can start again
+npm run sync          # refresh the browser engine copy
 npm run doctor        # what is wrong with this checkout
-npm run verify        # doctor, types, and every test the studio job runs
+npm run verify        # doctor, types, and every test the CI studio job runs
 ```
 
-`npm run doctor` checks the things that break the studio silently: engine
+`vinext dev` holds a lockfile and refuses to start while another server owns it.
+A closed terminal or a crash leaves that lock behind with nothing listening, so
+`dev:stop` clears it as well as stopping a live server.
+
+`npm run doctor` covers the faults that break the studio silently: engine
 modules absent from the browser manifest, manifest entries with no file behind
-them, browser copies that drifted from the engine sources, an incomplete
-Pyodide runtime, and a dev server or stale lock holding the port. Every failure
-names the command that fixes it. `npm run sync` fixes most of them; it is also
-wired as `prebuild`, so `npm run build` cannot produce a bundle that is behind
-the engine sources.
+them, entries carrying Windows path separators, browser copies that drifted
+from the engine sources, an incomplete Pyodide runtime, and a dev server or
+stale lock holding the port. Each finding names the command that clears it.
+`npm run sync` fixes most, and is wired as `prebuild` so a build cannot ship a
+bundle that is behind the engine sources.
 
 ### When the studio says the engine is incomplete
 
-> This deployment is serving an incomplete design engine (ModuleNotFoundError: No module named 'datacenter_equipment_finder')
+> This deployment is serving an incomplete design engine
+> (ModuleNotFoundError: No module named 'datacenter_equipment_finder')
 
 The browser assembles the engine from the file list in `/engine/manifest.json`
-and nothing else, so a module is missing from the studio whenever it is missing
-from that list **as served** - which can be true even when the repository is
-complete. Point the doctor at the deployment to tell the two apart:
+and nothing else. A module is therefore missing from the studio whenever it is
+missing from that list **as served**, which can be true while the repository is
+complete. Ask the deployment directly:
 
 ```sh
 npm run doctor -- --url https://your-studio-host
 ```
 
-It compares the served manifest against this checkout's engine modules and
-fetches a few files directly, so it distinguishes a short manifest, a 404 on a
-file the manifest promised, and a host returning an HTML fallback page in place
-of Python. If the local run passes and the `--url` run fails, the code is fine
-and the deployment is stale or incomplete: redeploy from a checkout where
-`npm run doctor` passes.
+It compares the served manifest against this checkout and fetches files from the
+host, so it separates the three faults that reach you as the same sentence:
 
-The selection core is vendored into `liquid_cooling_generator/datacenter_equipment_finder/`
-from [DATA-CENTER-EQUIPMENT-FINDER](https://github.com/RGoharimehr/DATA-CENTER-EQUIPMENT-FINDER);
-see [UPSTREAM.md](liquid_cooling_generator/datacenter_equipment_finder/UPSTREAM.md)
-for the pinned revision. Its catalogue is fetched at search time and is never
-bundled, so an equipment search also needs outbound access to that repository's
-raw content.
+| What the doctor finds | What it means |
+| --- | --- |
+| The served manifest is short | The deployment is stale or incomplete. Redeploy from a checkout where `npm run doctor` passes. |
+| A file the manifest promised returns 404, or an HTML page | The host is not serving that path. |
+| Manifest entries contain `\` | The bundle was built by a sync on Windows. Re-sync with the current `sync-engine.py` and redeploy. |
+
+A local pass with a `--url` failure means the code is fine and the deployment
+is not.
+
+### The equipment finder
+
+The selection core is vendored into
+`liquid_cooling_generator/datacenter_equipment_finder/` from
+[DATA-CENTER-EQUIPMENT-FINDER](https://github.com/RGoharimehr/DATA-CENTER-EQUIPMENT-FINDER)
+at the revision recorded in
+[UPSTREAM.md](liquid_cooling_generator/datacenter_equipment_finder/UPSTREAM.md),
+so the studio does not need that repository at load time. It does need it at
+search time: the catalogue is fetched from raw GitHub content on each search and
+is never bundled, so an equipment search requires outbound access to it.
 
 ## Use the CLI
 
@@ -102,8 +124,18 @@ npm run build
 - [Validation record and the independent acceptance harness](liquid_cooling_generator/VALIDATION.md)
 - [Adding a reference design](liquid_cooling_generator/references/PRESET_AUTHORING.md)
 
-This is a concept-layout generator with prescribed-flow pressure estimates. It does not solve hydraulic balance or certify a design. Air coils initially share FWS; warm CDU water may require a separate colder air-cooling loop. Vendor operating-point data remains subject to qualification.
+This is a concept-layout generator with prescribed-flow pressure estimates. It
+does not solve hydraulic balance and it does not certify a design. Air coils
+initially share FWS; warm CDU water may require a separate, colder air-cooling
+loop. Vendor operating-point data remains subject to qualification.
 
-Revit 2027/.NET 10 add-in source is included. Compilation and native import must be tested on Windows. Flownex SE 2025 Release 3 documents Revit 2026 support; Revit 2027 Network Builder compatibility is unconfirmed. IFC4 is coordination geometry, not proof of native Revit MEP editability. No fabricated Flownex project is included.
+Revit 2027 / .NET 10 add-in source is included; compilation and native import
+still have to be tested on Windows. Flownex SE 2025 Release 3 documents Revit
+2026 support, and Revit 2027 Network Builder compatibility is unconfirmed. IFC4
+is coordination geometry, not proof of native Revit MEP editability. No
+fabricated Flownex project is included.
 
-The supplied source books and full extracted reference documents are excluded. Short indicative source extracts and the source register preserve provenance without claiming standards certification. The Sites hosting manifest retains this project's existing binding; credentials and runtime secrets are not included.
+The supplied source books and the full extracted reference documents are
+excluded. Short indicative extracts and the source register preserve provenance
+without claiming standards certification. The Sites hosting manifest keeps this
+project's existing binding; credentials and runtime secrets are not included.

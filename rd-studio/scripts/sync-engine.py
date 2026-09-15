@@ -16,11 +16,15 @@ for p in engine.glob('*.py'):
 # deleted module cannot keep running in the worker.
 for stale in sorted((public/'engine').glob('*.py')):
     if stale.name not in names:print('removing stale browser copy:',stale.name);stale.unlink()
+# as_posix, not str: on Windows str(rel) yields backslash separators, and the
+# browser worker treats a manifest entry as a URL and as an absolute path in
+# its virtual filesystem. A backslash is an ordinary character in both, so the
+# package directory is never created and its modules cannot be imported.
 for p in (engine/'datacenter_equipment_finder').rglob('*.py'):
-    rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(str(rel))
+    rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(rel.as_posix())
 for p in (engine/'references/corpus').glob('*'):
     if p.suffix not in ('.txt','.json'):continue
-    rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(str(rel))
+    rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(rel.as_posix())
 (public/'engine/manifest.json').write_text(json.dumps(sorted(names)))
 (public/'catalog.json').write_text(json.dumps({'parameters':catalog(),'presets':PRESETS}))
 g,profile=build(Config.from_dict(PRESETS['compact']['config']))
@@ -38,7 +42,7 @@ else:
 # Include add-in source as text assets so ZIP handoff includes it in the worker.
 for p in (engine/'revit').rglob('*'):
     if p.is_file() and not any(x in p.parts for x in ('bin','obj')):
-        rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(str(rel))
+        rel=p.relative_to(engine);target=public/'engine'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);names.append(rel.as_posix())
 # The manifest is the only list the browser worker has. A sync that quietly
 # produced a short one is how a deployed studio ends up raising
 # ModuleNotFoundError for an engine module that is present in the repository.

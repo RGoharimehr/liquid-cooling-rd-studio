@@ -21,7 +21,12 @@ function initialize(requestId) {
     const manifest = await checked('/engine/manifest.json', true);
     if (!Array.isArray(manifest)) throw new Error('/engine/manifest.json did not return the engine file list. This deployment is serving something else at that address.');
     runtime.FS.mkdirTree('/engine');
-    await Promise.all(manifest.map(async name => {
+    await Promise.all(manifest.map(async rawName => {
+      // A manifest written on Windows carries backslash separators. Browsers
+      // normalise those in a URL, so the fetch succeeds, but a backslash is an
+      // ordinary character in the virtual filesystem: the file lands beside the
+      // package instead of inside it and the package cannot be imported.
+      const name = rawName.replace(/\\/g, '/');
       const contents = await checked('/engine/' + name);
       const path = '/engine/' + name;
       runtime.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
