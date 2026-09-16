@@ -60,6 +60,17 @@ class ZoneAndSizingIntegration(unittest.TestCase):
      self.assertGreater(max(mine),min(served))
     gaps=[x for x in g['metadata']['guidance']['checks'] if 'stand with the rows' in x['check']]
     self.assertEqual([x['status'] for x in gaps],['PASS','PASS'])
+ def test_every_gallery_and_layout_combination_still_routes(self):
+  # A gallery standing close to the first row it feeds left the link between
+  # them a 0.115 m leg to fit two 0.24 m bends in, and split_banks with a custom
+  # origin put it exactly there: the design stopped building at all.
+  c=Config(**PRESETS['rd113']['config'])
+  for style in ('side_gallery','central_network','split_banks'):
+   for placement in ('end_gallery','central_gallery','custom'):
+    with self.subTest(style=style,placement=placement):
+     changed=replace(c,layout_style=style,cdu_placement=placement)
+     g,_=build(changed)
+     self.assertTrue(any(x['kind']=='cdu' for x in g['components']))
  def test_an_end_gallery_reports_how_far_it_stands_off_the_rows(self):
   c=Config(**PRESETS['rd113']['config']);g,p=build(c)
   gaps=[x for x in g['metadata']['guidance']['checks'] if 'stand with the rows' in x['check']]

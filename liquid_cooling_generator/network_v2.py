@@ -331,8 +331,19 @@ class NetworkBuilder(Builder):
         arrives at the spine from south of its first takeoff.
         """
         ax,ay,az=self.xyz(collector);tx,ty,_=self.xyz(spine)
-        lead=max(.6,3*self.c.bend_radius_m+.05)
-        lane=min(max(ay+lead,ty-1.),ty-lead) if toward>0 else min(ay-lead,ty-1.)
+        # Stand the crossing a metre short of the spine and a fitting lead clear
+        # of the collector, where there is room for both. Where there is not, the
+        # only thing that has to hold is a bend's room either side of it: sizing
+        # that window by the lead instead inverted it and asked for a 0.115 m leg
+        # between two 0.24 m bends, which is what broke a gallery standing close
+        # to the first row it feeds.
+        lead=max(.6,3*self.c.bend_radius_m+.05);need=self.c.bend_radius_m+.02
+        if toward>0:lane=min(max(min(max(ay+lead,ty-1.),ty-lead),ay+need),ty-need)
+        else:lane=min(ay-lead,ty-1.,ay-need,ty-need)
+        if (lane-ay)*toward<need-1e-9 or ty-lane<need-1e-9:
+            raise ValueError(f'Cooling pod {self.current_pod}: the CDU gallery ends {abs(ty-ay):.2f} m from '
+                             f'the first row takeoff it feeds, which cannot hold the two bends the link needs. '
+                             f'Move the gallery clear of that row, or select a smaller fitting takeoff.')
         points=[[ax,lane,az],[tx,lane,az]]
         if supply:self.route_path(collector,spine,points,'TCS','main',self.fixed(0),group)
         else:self.route_path(spine,collector,points[::-1],'TCS','main',self.fixed(0),group)
