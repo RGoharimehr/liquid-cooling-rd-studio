@@ -39,6 +39,15 @@ raises its links over the pod headers and needs the ceiling to allow it. A water
 banks, towers and pumps occupy the south service corridor, and its own FWS ends
 face west and north, so the run would have to cross that circuit.
 
+## Needs attention
+
+The roll-up anchors each finding to the object it concerns, and puts the ones
+that are not about any single object in a systemic list instead. A finding that
+names a pipe family belongs to the family: one nominal size clears every fitting
+in it at once, so flagging each of them separately buries the handful that really
+are about one component. On a water-cooled RD113 in manual sizing that was the
+difference between 100 flagged components and 4.
+
 ## Pipe sizing
 
 *Manual* keeps one bore per pipe family, exactly as entered. *Preliminary* sizes

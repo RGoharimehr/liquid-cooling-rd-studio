@@ -60,6 +60,10 @@ def _smaller_size_would_fit(family, catalogues):
     return (nominal, velocity) if velocity <= family['velocity_cap_m_s'] + 1e-9 else None
 
 
+# Findings that describe a pipe family rather than any one fitting in it.
+FAMILY_CODES = ('MANUAL_VELOCITY_LIMIT_EXCEEDED', 'K_REFERENCE_IMPLAUSIBLE')
+
+
 def collect(graph, config=None):
     from hydraulics import CATALOGUES
     metadata = graph.get('metadata', {})
@@ -77,8 +81,11 @@ def collect(graph, config=None):
                 entry['resolved_by'] = resolved_by
             flags[component_id].append(entry)
 
-    # A velocity exceedance belongs to the pipe family, not to each of its
-    # segments: one nominal size clears every one of them at once.
+    # A finding that names a pipe family belongs to the family, not to each of
+    # its segments: one nominal size clears every one of them at once. A velocity
+    # exceedance is the obvious case; an implausible K reference is the same gap
+    # seen from the fitting side, and on a water-cooled RD113 in manual mode it
+    # was landing on 106 elbows, tees and valves individually.
     by_family = defaultdict(list)
     for item in sizing.get('unresolved', []):
         code = item.get('code')
@@ -86,16 +93,17 @@ def collect(graph, config=None):
             continue
         category, severity = SIZING_CODES[code]
         target = item.get('component_id') or owner.get(item.get('edge_id', ''))
-        if code == 'MANUAL_VELOCITY_LIMIT_EXCEEDED' and item.get('family'):
-            by_family[item['family']].append((target, item))
+        if code in FAMILY_CODES and item.get('family'):
+            by_family[(code, item['family'])].append((target, item))
         elif target:
             add(target, code, category, severity, item.get('detail') or item.get('reason', ''), 'preliminary_sizing')
     families = {f['family']: f for f in sizing.get('size_families', [])}
-    for name, items in by_family.items():
+    for (code, name), items in by_family.items():
         ids = sorted({t for t, _ in items if t in components})
         family = families.get(name, {})
-        systemic.append({'code': 'MANUAL_VELOCITY_LIMIT_EXCEEDED', 'category': 'undersized',
-            'severity': 'review', 'scope': f'pipe family {name}', 'components': len(ids),
+        category, severity = SIZING_CODES[code]
+        systemic.append({'code': code, 'category': category,
+            'severity': severity, 'scope': f'pipe family {name}', 'components': len(ids),
             'component_ids': ids, 'detail': items[0][1]['detail'],
             'clears_when': f"{family.get('parameter', name + '_nominal_in')} is increased, "
                            f"or Preliminary sizing selects the bore."})
