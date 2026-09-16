@@ -71,8 +71,11 @@ intercept its controls.
 
 ## What the engine reports
 
-**Pipe sizing.** *Piping → Preliminary* rounds pipe families through the
-commercial-size catalogue. *Manual* retains the commercial dimensions you chose
+**Pipe sizing.** *Piping → Preliminary* sizes each run for what it carries, so a
+header steps down as it passes each takeoff instead of carrying the whole
+circuit's bore to its last tee. A run changes size only inside a reducer or an
+ASME B16.9 reducing tee; a pipe, elbow or valve is one bore end to end, and the
+generated design is checked against that. *Manual* retains the commercial dimensions you chose
 while still calculating flow, rough pressure losses, pump duty and valve Kv/Cv
 for equipment matching. Velocity exceedances stay warnings and candidate
 limitations; the finder never resizes pipes. *Sizing estimates* holds the flow,

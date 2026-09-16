@@ -361,8 +361,15 @@ def evaluate(graph, config, *, use_applied_sizes=False):
     warnings += [{'code': 'FLOW_ASSIGNMENT_UNRESOLVED', **item} for item in unknown]
     if kinds[('CWS', 'cooling_tower')] and cop is None:
         warnings.append({'code': 'CONDENSER_HEAT_LOWER_BOUND', 'detail': 'CWS flow uses evaporator heat only; compressor and pump heat are missing. Enter chiller_cop before calling this a tower duty.'})
-    # Uniform families deliberately avoid suggesting unintended bore changes at
-    # every pipe segment. Fitting/pipe families are changed only at reducers.
+    # How much a main section's duty can rise when a unit it shares a header with
+    # goes offline. Per pod for a technology circuit; the worst pod for facility
+    # water, which serves all of them.
+    main_uplift = {}
+    for circuit, items in cdu_by_pod.items():
+        main_uplift[circuit] = len(items) / max(1, len(items) - global_spares)
+    worst = max(main_uplift.values(), default=1.)
+    for circuit in family_totals:
+        main_uplift.setdefault(circuit, worst)
     families = {}; estimates = {}; pending = []
     for edge in edges:
         eid, service, circuit, cid = edge['id'], edge['service'], edge['_circuit'], edge['component_id']
@@ -384,6 +391,15 @@ def evaluate(graph, config, *, use_applied_sizes=False):
             envelope = max(flow, max((prescribed[e['id']] for e in rack_edges if e['_circuit'] == circuit), default=flow))
         elif service == 'TCS' and level == 'row':
             envelope = row_flows.get((circuit, edge.get('row') or comp.get('row')), flow)
+        elif level == 'main':
+            # A header steps down as it passes each takeoff, so a section is sized
+            # for what that section carries, not for the whole circuit. An outage
+            # moves a neighbouring unit's duty onto it, hence the uplift; nothing
+            # carries more than its own circuit, hence the cap. A section with no
+            # carried flow at all - a standby leg behind a shut valve - takes the
+            # circuit total, because it takes full duty when that valve opens.
+            total = family_totals.get(circuit, flow)
+            envelope = total if flow < 1e-12 else min(total, flow * main_uplift.get(circuit, 1.))
         else:
             envelope = family_totals.get(circuit, flow)
         design_flow = max(flow, envelope)
@@ -393,9 +409,14 @@ def evaluate(graph, config, *, use_applied_sizes=False):
         if type(cap) not in (int, float) or not isfinite(cap) or cap <= 0:
             raise ValueError('Velocity cap must be positive: ' + eid)
         material = edge.get('material')
+        # With a bore per run, one family holds several commercial sizes. Group by
+        # the applied bore as well, or the consistency check below rejects a
+        # perfectly ordinary header that steps down along its length.
         fkey = family + ':' + str(material)
-        entry = families.setdefault(fkey, {'family': family, 'parameter': family + '_nominal_in', 'material': material,
-            'design_flow_m3_s': 0., 'velocity_cap_m_s': cap, 'edge_ids': []})
+        if use_applied_sizes and edge.get('nominal_size_in'):
+            fkey += ':%g' % edge['nominal_size_in']
+        entry = families.setdefault(fkey, {'family': family, 'key': fkey, 'parameter': family + '_nominal_in',
+            'material': material, 'design_flow_m3_s': 0., 'velocity_cap_m_s': cap, 'edge_ids': []})
         entry['design_flow_m3_s'] = max(entry['design_flow_m3_s'], design_flow)
         entry['velocity_cap_m_s'] = min(entry['velocity_cap_m_s'], cap); entry['edge_ids'].append(eid)
         estimates[eid] = {'edge_id': eid, 'component_id': cid, 'circuit_id': circuit, 'service': service,

@@ -78,8 +78,13 @@ class ZoneAndSizingIntegration(unittest.TestCase):
    c=replace(self.c,plant_type=plant,sizing_mode='preliminary');g,p=build(c)
    self.assertEqual(run(g,c,p)['blocking_failures'],[])
    result=g['metadata']['preliminary_sizing'];self.assertTrue(result['geometry_modified']);self.assertFalse(result['network_pressure_solve_performed'])
-   edge=next(e for e in g['edges'] if e['kind']=='pipe' and e['service']=='FWS' and e['level']=='main')
-   self.assertEqual(edge['nominal_size_in'],result['suggested_config']['fws_main_nominal_in'])
+   # A main is sized for what its own run carries, so the family recommendation
+   # is the envelope none of them exceeds rather than the size all of them take.
+   mains=[e['nominal_size_in'] for e in g['edges'] if e['kind']=='pipe' and e['service']=='FWS' and e['level']=='main']
+   envelope=result['suggested_config']['fws_main_nominal_in']
+   self.assertTrue(mains);self.assertEqual(max(mains),envelope)
+   self.assertLess(min(mains),envelope)
+   self.assertTrue(any(x['kind']=='tee' and x.get('reducing_designation') for x in g['components']))
    self.assertTrue(any(p.get('pump_head_m',0)>0 for p in result['pump_screens']))
  def test_bad_zone_arrays_are_rejected(self):
   for change in ({'pod_origins_m':[[1]]},{'pod_rotations_deg':[45]},{'site_footprint_width_m':20}):

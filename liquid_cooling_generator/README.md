@@ -39,6 +39,39 @@ raises its links over the pod headers and needs the ceiling to allow it. A water
 banks, towers and pumps occupy the south service corridor, and its own FWS ends
 face west and north, so the run would have to cross that circuit.
 
+## Pipe sizing
+
+*Manual* keeps one bore per pipe family, exactly as entered. *Preliminary* sizes
+each **run** for what that run carries. A run is a maximal stretch that has to
+share a bore, broken only at a reducer or a tee, because those are the two
+fittings that can hold two: a concentric or eccentric reducer between two runs,
+and an ASME B16.9 reducing tee, designated run x run x branch. Everything else -
+pipe, elbow, valve, strainer, quick disconnect, flexible connector - is one bore
+end to end, so an elbow never reduces.
+
+A section's duty is the carried flow with the redundancy uplift, because an
+outage moves a neighbouring unit's duty onto the header it shares, capped at its
+own circuit total. A section with no carried flow - a standby leg behind a shut
+isolation valve - takes the circuit total, because it takes full duty the moment
+that valve opens. Branch levels keep the duty envelopes they already had.
+
+On RD113 that turns four bores into eight and puts the reduction where it
+belongs:
+
+| | before | after |
+| --- | --- | --- |
+| distinct bores applied | 4 | 8 |
+| NPS 16 pipe | 180 edges | 132 edges |
+| reducing tees | 0 | 20 |
+
+`Bore changes stay inside a reducing fitting` is the check that keeps it honest:
+two bores on one component are ordinary on a reducer or a tee and wrong on a
+pipe, an elbow or a valve. The pairing check cannot see it, because it only
+compares across a joint.
+
+The run table is in `metadata.run_sizing`. No listed reducing tee is confirmed to
+exist in the chosen run x run x branch combination; that is a procurement check.
+
 ## CDU placement
 
 `cdu_placement` decides where a pod's CDUs stand. `central_gallery` stands each

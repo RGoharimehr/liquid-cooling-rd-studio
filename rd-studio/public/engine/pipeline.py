@@ -48,7 +48,13 @@ def build(config):
         missing=[f for f in recommendations['size_families'] if not f.get('selection')]
         # Keep the rough graph reviewable when one family exceeds the verified catalogue.
         sizing_config=replace(sizing_config,**recommendations['suggested_config'])
-        apply_sizes(g,sizing_config)
+        # One bore per run rather than one per family: a header steps down along
+        # its length instead of carrying the whole circuit's bore to its last tee.
+        from run_sizing import resolve as size_runs
+        runs=size_runs(g,config,recommendations['edge_estimates'],
+                       {f['key']:f for f in recommendations['size_families'] if f.get('key')})
+        apply_sizes(g,sizing_config,per_edge=runs['edge_sizes'],per_port=runs['port_sizes'])
+        g['metadata']['run_sizing']={k:v for k,v in runs.items() if k not in ('edge_sizes','port_sizes')}
     equipment(g,config)
     from zone_editing import relocate_equipment,footprint_check
     relocate_equipment(g,config)
@@ -57,8 +63,21 @@ def build(config):
     attach_contract(g,config)
     if config.sizing_mode in ('preliminary','manual'):
         from preliminary_sizing import evaluate as estimate
+        # Applied bores now differ within a family, so the losses have to be read
+        # off the graph in both modes rather than from one size per family.
+        estimates=estimate(g,config,use_applied_sizes=True)
         manual=config.sizing_mode=='manual'
-        estimates=estimate(g,config,use_applied_sizes=manual)
+        if not manual:
+            # This pass prices what the runs applied. The family recommendation,
+            # and any duty no catalogue size can carry, belong to the pass that
+            # chose the sizes - so carry both across rather than letting an
+            # applied bore read as a satisfied one.
+            estimates['suggested_config']=recommendations['suggested_config']
+            estimates['size_families']=recommendations['size_families']
+            beyond=[dict(item) for item in runs['unsized']]
+            for item in beyond:item['code']='NO_CATALOGUE_SIZE'
+            estimates['unresolved']=[item for item in recommendations['unresolved']
+                                     if item.get('code')=='NO_CATALOGUE_SIZE']+beyond+estimates['unresolved']
         estimates['geometry_modified']=not manual and all(f.get('selection') for f in estimates['size_families'])
         estimates['scope']=('Manual commercial pipe sizes retained; flow, pressure loss, pump head and valve duties evaluated at those bores. ' if manual else 'Catalogue sizes applied to uniform pipe families; routed geometry is checked separately. ')+'Prescribed-flow estimates, not a balanced network solution.'
         g['metadata']['preliminary_sizing']=estimates

@@ -36,6 +36,17 @@ def diagnose(g,c):
             dangling.append({'node':nid,'owners':len(refs)})
     add('Connected ports face each other',turns,'Every direction change needs an explicit fitting or declared equipment port direction.')
     add('Connected nominal bores agree',bores,'Diameter changes must occur inside an explicit reducer.')
+    # Sizing a run for what it carries puts two bores on one fitting. That is
+    # ordinary where the fitting is built to hold them and wrong anywhere else,
+    # and the pairing check above cannot see it: it only compares across a joint.
+    steps=[]
+    for comp in active:
+        if comp.get('size_m'):continue
+        sizes={p['nominal_size_in'] for p in comp.get('port_details',[]) if p.get('nominal_size_in')}
+        if len(sizes)>1 and comp['kind'] not in ('reducer','tee'):
+            steps.append({'component':comp['id'],'kind':comp['kind'],'bores':sorted(sizes)})
+    add('Bore changes stay inside a reducing fitting',steps,
+        'Only a concentric/eccentric reducer or an ASME B16.9 reducing tee may hold two bores. A pipe, elbow or valve is one size end to end.')
     add('Fluid circuits remain separate',mixed,'FWS, CWS and independent TCS pods cannot share a fluid connection.')
     add('Physical fluid ports have partners',dangling,'Only declared boundary interfaces may be open.')
     invalid=[];segments=[]
