@@ -21,6 +21,10 @@ def cdu_gallery(c, row_y):
     with the pods assigned in the opposite order to the rows, both galleries sit
     on the wrong half and every rack branch pays for the crossing.
 
+    Galleries that would land on top of each other are packed a CDU pitch apart,
+    nearest first, so two pods with adjacent rows do not both claim the same
+    metre of the hall.
+
     An end gallery is a deliberate choice to stand the CDUs off the hall, so it
     keeps its single column at the end, and a custom origin is left alone.
     """
@@ -30,13 +34,25 @@ def cdu_gallery(c, row_y):
     elif c.cdu_placement == 'central_gallery':
         rows = assignments(c.rows, c.pod_count, c.row_pod_assignments)
         cdus = assignments(c.cdu_count, c.pod_count, c.cdu_pod_assignments)
-        y = {}
+        galleries = []
         for pod in sorted(set(cdus)):
             served = [row_y[i] for i, value in enumerate(rows) if value == pod] or row_y
             mine = [i for i, value in enumerate(cdus) if value == pod]
-            start = (min(served)+max(served))/2-(len(mine)-1)*pitch/2
-            for offset, index in enumerate(mine):
-                y[index] = start+offset*pitch
+            galleries.append({'units': mine, 'start': (min(served)+max(served))/2-(len(mine)-1)*pitch/2})
+        # Two pods whose rows sit close together want their galleries in the same
+        # place. Pack them instead, nearest first, keeping a CDU pitch between the
+        # last unit of one and the first of the next: two enclosures 0.06 m apart
+        # is not a placement. How far the packing pushes a gallery off the rows it
+        # feeds is what the guidance check reports.
+        limit = None
+        for gallery in sorted(galleries, key=lambda item: item['start']):
+            if limit is not None and gallery['start'] < limit:
+                gallery['start'] = limit
+            limit = gallery['start']+len(gallery['units'])*pitch
+        y = {}
+        for gallery in galleries:
+            for offset, index in enumerate(gallery['units']):
+                y[index] = gallery['start']+offset*pitch
         return [y[i] for i in range(c.cdu_count)]
     else:
         base = -2-(c.cdu_count-1)*pitch

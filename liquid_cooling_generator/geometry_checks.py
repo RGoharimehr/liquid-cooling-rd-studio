@@ -49,13 +49,21 @@ def diagnose(g,c):
         'Only a concentric/eccentric reducer or an ASME B16.9 reducing tee may hold two bores. A pipe, elbow or valve is one size end to end.')
     add('Fluid circuits remain separate',mixed,'FWS, CWS and independent TCS pods cannot share a fluid connection.')
     add('Physical fluid ports have partners',dangling,'Only declared boundary interfaces may be open.')
-    invalid=[];segments=[]
+    invalid=[];needed=0.;turning=0.;segments=[]
     for comp in active:
         if comp.get('size_m'):continue
         pts=[nodes[p] for p in comp.get('ports',[])];r=comp.get('od_m',0)/2+c.insulation_thickness_m
         if comp['kind'] in ('elbow','tee'):
             center=comp['center_m']
-            if comp['kind']=='elbow' and min(dist(p,center) for p in pts)<=r:invalid.append(comp['id'])
+            envelope=min(dist(p,center) for p in pts) if comp['kind']=='elbow' else None
+            if envelope is not None and envelope<=r:
+                invalid.append(comp['id'])
+                # An elbow cannot turn a pipe inside its own outer radius. Report
+                # the bore's radius and the envelope that failed to turn it:
+                # "some elbows are invalid" names no input to change, and the
+                # envelope is a routed bend radius on some of them and a fitting
+                # arm on the ones a collector ends with.
+                if r>needed:needed,turning=r,envelope
             # Conservative construction legs; joins excluded only with immediate neighbors.
             if comp['kind']=='elbow':
                 a,b=pts;origin=[a[k]+b[k]-center[k] for k in range(3)];r0=sub(center,b);r1=sub(center,a)
@@ -95,7 +103,13 @@ def diagnose(g,c):
                 if all(max(abs(overlap_lo[k]-center[k]),abs(overlap_hi[k]-center[k]))<=extent+1e-6 for k in range(3)):joint_region=True
             if joint_region:continue
             if segment_distance(p,q,u,v)<ra+rb+c.pipe_clear_gap_m-1e-6:clashes.add(tuple(sorted((a['id'],b['id']))))
-    add('Bend takeoff exceeds insulated outer radius',invalid,'No miter replacement or silent radius reduction is permitted.')
+    add('Bend takeoff exceeds insulated outer radius',invalid,
+        (f'The largest offending bore has an insulated outer radius of {needed:.3f} m and the envelope turning '
+         f'it is {turning:.3f} m. Raise bend_radius_m and fitting_arm_m above that radius; fitting_arm_m is '
+         f'limited to 0.24 m, so a bore larger than that cannot be represented by this fitting envelope at all. '
+         if invalid else '')+
+        'No miter replacement or silent radius reduction is permitted. A commercial long-radius elbow is 1.5 '
+        'nominal diameters, larger again than this geometric minimum.')
     add('Routed pipe and fitting clearances',sorted(clashes),'Conservative finite centerline segments with OD, insulation and configured clear gap. Component bodies/vendor envelopes remain separately qualified.')
     body_clashes=set()
     def intersects(p,q,lo,hi):

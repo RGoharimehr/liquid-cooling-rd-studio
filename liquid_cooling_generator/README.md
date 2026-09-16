@@ -75,7 +75,8 @@ exist in the chosen run x run x branch combination; that is a procurement check.
 ## CDU placement
 
 `cdu_placement` decides where a pod's CDUs stand. `central_gallery` stands each
-pod's CDUs alongside the rows that pod feeds - its own rows, whichever way round
+pod's CDUs alongside the rows that pod feeds, packing two galleries a CDU pitch
+apart where the pods' rows sit too close together for both - its own rows, whichever way round
 the pods were assigned to them - and `end_gallery` stands them all off the end of
 the hall, which is a legitimate choice and the reason this reports rather than
 blocks. Every design reports, per pod, how far its gallery stands clear of the
