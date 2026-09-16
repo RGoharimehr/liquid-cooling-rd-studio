@@ -9,7 +9,8 @@ RD='https://www.se.com/sg/en/download/document/RD113DS/'
 EXCLUDED={'standards_overrides','hx_approach_K','schema_version'}
 OPTIONS={'layout_style':['side_gallery','central_network','split_banks'],'return_topology':['direct_return','reverse_return'],'cdu_placement':['end_gallery','central_gallery','custom'],'sizing_mode':['manual','preliminary'],'flow_input_mode':['lpm_per_kw','heat_balance'],'standards_profile':['project','deschutes_module','rd113_r1'],'plant_type':['boundary','air_cooled','water_cooled'],'tcs_class':['S20','S25','S30','S35','S40','S45','S50'],'fws_class':['W17','W27','W32','W40','W45','W+']}
 RANGES={'rows':(1,16,1),'racks_per_row':(1,40,1),'network_rows':(0,8,1),'network_racks_per_row':(0,40,1),'network_high_power_count':(0,320,1),'cdu_count':(1,8,1),'redundancy':(0,7,1),'liquid_fraction':(.01,1,.01),'pg_volume_fraction':(0,.6,.01),'fitting_arm_m':(.04,.24,.01),'bend_radius_m':(.04,.35,.01),'rack_power_W':(1,1000000,1000),'network_rack_power_W':(0,1000000,1000),'network_high_power_W':(0,1000000,1000),'aisle_width_m':(.6,10,.05),'first_rack_x_m':(1,50,.1),'cdu_pitch_m':(1,20,.1)}
-LABELS={'rows':'Compute rows','racks_per_row':'Compute racks per row','layout_style':'Layout arrangement','return_topology':'Return-pipe topology','cdu_placement':'CDU placement','rack_power_W':'Compute rack power','network_high_power_count':'High-power network racks','network_high_power_W':'High-power rack rating','standards_profile':'Reference comparison','pg_volume_fraction':'PG volume fraction'}
+LABELS={'air_offset_x_m':'Air-unit strip offset X','air_offset_y_m':'Air-unit strip offset Y',
+ 'air_unit_count':'Air cooling units','rows':'Compute rows','racks_per_row':'Compute racks per row','layout_style':'Layout arrangement','return_topology':'Return-pipe topology','cdu_placement':'CDU placement','rack_power_W':'Compute rack power','network_high_power_count':'High-power network racks','network_high_power_W':'High-power rack rating','standards_profile':'Reference comparison','pg_volume_fraction':'PG volume fraction'}
 
 def catalog():
     result=[]
@@ -20,6 +21,7 @@ def catalog():
         elif key.startswith(('plant_','chiller_','fws_pump_','cws_','tower_')):group='Plant'
         elif key in ('pod_count','row_pod_assignments','cdu_pod_assignments','pod_origins_m','pod_rotations_deg','pod_elevation_spacing_m'):group='Cooling pods'
         elif key.startswith('cdu_') or key=='redundancy':group='CDUs'
+        elif key.startswith('air_') or key=='additional_air_load_W':group='Air cooling'
         elif key.startswith('include_') or 'clearance' in key or 'clear_gap' in key:group='Installation'
         elif 'nominal' in key or 'material' in key or 'velocity_cap' in key or key=='sizing_mode':group='Piping'
         elif key.startswith(('tcs_','fws_','pg_')) or key in ('rack_power_W','liquid_fraction'):group='Design duty'

@@ -57,7 +57,10 @@ Select a reference, tune parameters, and arrange the plan before clicking
 **Apply design**.
 
 In **Plan**, enable **Arrange zones**, then select a cooling pod, network-rack
-zone or plant and drag, rotate or flip it as many times as needed. These edits
+zone, air-unit strip or plant and drag, rotate or flip it as many times as
+needed. The air-unit strip is placed relative to whatever else the design
+generated, so it moves but does not turn, and its rotate and flip controls are
+disabled to say so. These edits
 update a lightweight draft only: equipment moves immediately while faint piping
 remains the last applied route. **Undo arrangement change** reverses one draft
 action, and **Discard pending changes** restores the applied inputs. Placement

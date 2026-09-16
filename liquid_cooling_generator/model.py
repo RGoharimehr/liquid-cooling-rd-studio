@@ -155,6 +155,8 @@ class Config:
     plant_flip_x: bool = False
     plant_flip_y: bool = False
     air_unit_count: int = 2
+    air_offset_x_m: float = 0.0
+    air_offset_y_m: float = 0.0
     additional_air_load_W: float = 0.0
     air_unit_design_dp_kPa: float = 35.0
     fws_air_nominal_in: float = 2.0
@@ -239,6 +241,9 @@ class Config:
             items=getattr(self,name)
             if not isinstance(items,list) or (items and (len(items)!=count or any(type(x) is not int or not 1<=x<=self.pod_count for x in items) or set(items)!=set(range(1,self.pod_count+1)))): raise ValueError(f'{name}: enter exactly {count} pod numbers between 1 and {self.pod_count}, including every pod, or use Balance pod assignments to restore automatic grouping.')
         if type(self.air_unit_count) is not int or not 1<=self.air_unit_count<=16:raise ValueError('Air cooling units: use 1–16 units. Each represents an aggregate CRAH/wall coil with external water connections.')
+        for name in ('air_offset_x_m','air_offset_y_m'):
+            value=getattr(self,name)
+            if type(value) not in (int,float) or not math.isfinite(value) or abs(value)>200:raise ValueError('Air-unit offsets must be finite and within 200 m of the generated strip')
         for key in ('additional_air_load_W','air_unit_design_dp_kPa'):
             if type(getattr(self,key)) not in (int,float) or not math.isfinite(getattr(self,key)) or getattr(self,key)<0:raise ValueError(key+' must be finite and nonnegative')
         for key in ('pod_flip_x','pod_flip_y'):

@@ -207,18 +207,27 @@ def relocate_equipment(graph, config):
                       'equipment_ids': [comp['id'] for comp in members],
                       'coordinate_frame': 'layout', 'origin_parameter': 'pod_origins_m',
                       'rotation_parameter': 'pod_rotations_deg', 'flip_x_parameter':'pod_flip_x', 'flip_y_parameter':'pod_flip_y'})
+    air = graph['metadata'].get('air_cooling', {})
     for kind, label, members, anchor, rotation in [
             ('network_zone', 'Network racks', [comp for comp in graph['components'] if comp['kind'] == 'network_rack'],
              graph['layout']['network_origin_m'], getattr(config,'network_rotation_deg',0)),
+            ('air_cooling', 'Air units', [comp for comp in graph['components'] if comp['kind'] == 'air_unit'],
+             air.get('origin_m') or [0., 0., 0.], 0),
             ('plant', 'Cooling plant', [comp for comp in graph['components'] if comp.get('zone') == 'plant' and comp.get('size_m')],
              [config.plant_origin_x_m, config.plant_origin_y_m, config.plant_elevation_m], config.plant_rotation_deg)]:
         if members:
-            prefix = 'network' if kind == 'network_zone' else 'plant'
-            zones.append({'id': kind, 'kind': kind, 'label': label, 'anchor_m': anchor,
-                          'rotation_deg': rotation, 'bounds_m': _bounds(members),
-                          'flip_x':getattr(config,prefix+'_flip_x',False), 'flip_y':getattr(config,prefix+'_flip_y',False),
-                          'rotation_parameter':prefix+'_rotation_deg', 'flip_x_parameter':prefix+'_flip_x', 'flip_y_parameter':prefix+'_flip_y',
-                          'equipment_ids': [comp['id'] for comp in members], 'coordinate_frame': 'layout'})
+            prefix = {'network_zone':'network','air_cooling':'air'}.get(kind,'plant')
+            zone = {'id': kind, 'kind': kind, 'label': label, 'anchor_m': anchor,
+                    'rotation_deg': rotation, 'bounds_m': _bounds(members),
+                    'flip_x':getattr(config,prefix+'_flip_x',False), 'flip_y':getattr(config,prefix+'_flip_y',False),
+                    'equipment_ids': [comp['id'] for comp in members], 'coordinate_frame': 'layout'}
+            # The air strip is placed relative to whatever else the design
+            # generated, so it moves and does not turn: there is no origin to
+            # rotate a conceptual load bank about that would mean anything.
+            if kind != 'air_cooling':
+                zone.update({'rotation_parameter':prefix+'_rotation_deg', 'flip_x_parameter':prefix+'_flip_x',
+                             'flip_y_parameter':prefix+'_flip_y'})
+            zones.append(zone)
     graph['layout']['editable_zones'] = zones
     graph['layout']['pod_equipment_relocated'] = True
     return zones
@@ -287,11 +296,15 @@ def propose_zone_edit(graph, config, zone_id, *, anchor_m=None, rotation_deg=Non
                                   ('pod_flip_y',new['flip_y'],lambda z:z.get('flip_y',False))]:
             values=deepcopy(candidate[key]) or [default(z) for z in pods];values[idx]=value;candidate[key]=values
     else:
-        prefix='network' if zone['kind']=='network_zone' else 'plant'
-        if prefix=='network':
-            candidate['network_offset_x_m']+=new_anchor[0]-old_anchor[0];candidate['network_offset_y_m']+=new_anchor[1]-old_anchor[1]
-        else:candidate.update(plant_origin_x_m=new_anchor[0],plant_origin_y_m=new_anchor[1])
-        candidate.update({prefix+'_rotation_deg':new['rotation_deg'],prefix+'_flip_x':new['flip_x'],prefix+'_flip_y':new['flip_y']})
+        prefix={'network_zone':'network','air_cooling':'air'}.get(zone['kind'],'plant')
+        if prefix=='plant':candidate.update(plant_origin_x_m=new_anchor[0],plant_origin_y_m=new_anchor[1])
+        else:
+            candidate[prefix+'_offset_x_m']+=new_anchor[0]-old_anchor[0]
+            candidate[prefix+'_offset_y_m']+=new_anchor[1]-old_anchor[1]
+        # A zone that declares no rotation parameter does not turn; setting one
+        # would invent a config key and reject the whole proposal.
+        if zone.get('rotation_parameter'):
+            candidate.update({prefix+'_rotation_deg':new['rotation_deg'],prefix+'_flip_x':new['flip_x'],prefix+'_flip_y':new['flip_y']})
     def belongs(item):
         if item['id'] in member_ids:return True
         host=item.get('host','')

@@ -1,9 +1,11 @@
 /** Lightweight arrangement preview. Only Apply invokes the routing engine. */
-export type Zone={id:string;kind:string;pod?:number;label:string;anchor_m:number[];anchor_layout_m?:number[];original_anchor_m?:number[];bounds_m:{min:number[];max:number[]}|null;rotation_deg:number;flip_x?:boolean;flip_y?:boolean;equipment_ids?:string[]};
+export type Zone={id:string;kind:string;pod?:number;label:string;anchor_m:number[];anchor_layout_m?:number[];original_anchor_m?:number[];bounds_m:{min:number[];max:number[]}|null;rotation_deg:number;flip_x?:boolean;flip_y?:boolean;equipment_ids?:string[];rotation_parameter?:string};
 export type ZoneEdit={anchor_m?:number[];rotation_deg?:number;flip_x?:boolean;flip_y?:boolean};
 type Config=Record<string,any>;
-export const placementKeys=new Set(['pod_origins_m','pod_rotations_deg','pod_flip_x','pod_flip_y','plant_origin_x_m','plant_origin_y_m','plant_rotation_deg','plant_flip_x','plant_flip_y','network_offset_x_m','network_offset_y_m','network_rotation_deg','network_flip_x','network_flip_y']);
+export const placementKeys=new Set(['pod_origins_m','pod_rotations_deg','pod_flip_x','pod_flip_y','plant_origin_x_m','plant_origin_y_m','plant_rotation_deg','plant_flip_x','plant_flip_y','network_offset_x_m','network_offset_y_m','network_rotation_deg','network_flip_x','network_flip_y','air_offset_x_m','air_offset_y_m']);
 const same=(a:any,b:any)=>JSON.stringify(a)===JSON.stringify(b);
+/** Zones placed by an offset from where the generator put them, not by an origin. */
+const offsetPrefix=(z:Zone)=>z.kind==='network_zone'?'network':z.kind==='air_cooling'?'air':'';
 export function arrangementBlockReason(applied:Config,draft:Config){
  return Object.keys(draft).some(k=>!placementKeys.has(k)&&!same(draft[k],applied[k]))?'Apply the other parameter changes first to update the equipment and coordinate frame. Zone placement changes can be arranged together.':'';
 }
@@ -13,7 +15,9 @@ function vector(p:number[],z:Zone,inverse=false){const a=z.rotation_deg*Math.PI/
 export function draftZone(zone:Zone,applied:Config,draft:Config):Zone{
  const old=zone.anchor_layout_m||local(zone.anchor_m,applied);let anchor=old;let rotation=zone.rotation_deg,flipX=!!zone.flip_x,flipY=!!zone.flip_y;
  if(zone.pod){const i=zone.pod-1;anchor=draft.pod_origins_m?.[i]?[...draft.pod_origins_m[i],old[2]]:(zone.original_anchor_m||old);rotation=draft.pod_rotations_deg?.[i]??0;flipX=draft.pod_flip_x?.[i]??false;flipY=draft.pod_flip_y?.[i]??false;}
- else {const prefix=zone.kind==='network_zone'?'network':'plant';anchor=prefix==='plant'?[draft.plant_origin_x_m,draft.plant_origin_y_m,old[2]]:[old[0]+Number(draft.network_offset_x_m||0)-Number(applied.network_offset_x_m||0),old[1]+Number(draft.network_offset_y_m||0)-Number(applied.network_offset_y_m||0),old[2]];rotation=draft[prefix+'_rotation_deg']??rotation;flipX=draft[prefix+'_flip_x']??flipX;flipY=draft[prefix+'_flip_y']??flipY;}
+ else {const prefix=offsetPrefix(zone);anchor=prefix?[old[0]+Number(draft[prefix+'_offset_x_m']||0)-Number(applied[prefix+'_offset_x_m']||0),old[1]+Number(draft[prefix+'_offset_y_m']||0)-Number(applied[prefix+'_offset_y_m']||0),old[2]]:[draft.plant_origin_x_m,draft.plant_origin_y_m,old[2]];
+  // A zone that declares no rotation parameter moves and does not turn.
+  if(zone.rotation_parameter){const key=prefix||'plant';rotation=draft[key+'_rotation_deg']??rotation;flipX=draft[key+'_flip_x']??flipX;flipY=draft[key+'_flip_y']??flipY;}}
  return {...zone,anchor_layout_m:anchor,anchor_m:world(anchor,applied),rotation_deg:rotation,flip_x:flipX,flip_y:flipY};
 }
 export function stageZoneEdit(zones:Zone[],applied:Config,draft:Config,id:string,edit:ZoneEdit):Config{
@@ -27,7 +31,10 @@ export function stageZoneEdit(zones:Zone[],applied:Config,draft:Config,id:string
  const anchor=local(next.anchor_m,applied),out={...draft};
  if(base.pod){const pods=zones.filter(z=>z.pod).sort((a,b)=>a.pod!-b.pod!).map(z=>draftZone(z,applied,draft));const idx=base.pod-1;
   for(const [key,value,values] of [['pod_origins_m',anchor.slice(0,2),pods.map(z=>z.anchor_layout_m!.slice(0,2))],['pod_rotations_deg',next.rotation_deg,pods.map(z=>z.rotation_deg)],['pod_flip_x',next.flip_x,pods.map(z=>z.flip_x)],['pod_flip_y',next.flip_y,pods.map(z=>z.flip_y)]] as [string,any,any[]][]){out[key]=values;out[key][idx]=value;}
- }else{const prefix=base.kind==='network_zone'?'network':'plant';if(prefix==='plant'){out.plant_origin_x_m=anchor[0];out.plant_origin_y_m=anchor[1];}else{const old=current.anchor_layout_m!;out.network_offset_x_m=Number(draft.network_offset_x_m||0)+anchor[0]-old[0];out.network_offset_y_m=Number(draft.network_offset_y_m||0)+anchor[1]-old[1];}out[prefix+'_rotation_deg']=next.rotation_deg;out[prefix+'_flip_x']=next.flip_x;out[prefix+'_flip_y']=next.flip_y;}
+ }else{const prefix=offsetPrefix(base);
+  if(!prefix){out.plant_origin_x_m=anchor[0];out.plant_origin_y_m=anchor[1];}
+  else{const old=current.anchor_layout_m!;out[prefix+'_offset_x_m']=Number(draft[prefix+'_offset_x_m']||0)+anchor[0]-old[0];out[prefix+'_offset_y_m']=Number(draft[prefix+'_offset_y_m']||0)+anchor[1]-old[1];}
+  if(base.rotation_parameter){const key=prefix||'plant';out[key+'_rotation_deg']=next.rotation_deg;out[key+'_flip_x']=next.flip_x;out[key+'_flip_y']=next.flip_y;}}
  return out;
 }
 export function transformPoint(point:number[],before:Zone,after:Zone,config:Config){const a=before.anchor_layout_m||local(before.anchor_m,config),b=after.anchor_layout_m||local(after.anchor_m,config);const p=local(point,config);const v=vector(vector(p.map((x,i)=>x-a[i]),before,true),after);return world(v.map((x,i)=>x+b[i]),config);}

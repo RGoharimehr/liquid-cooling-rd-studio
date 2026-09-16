@@ -47,7 +47,10 @@ def add_air_cooling(b):
     # The north wall/service strip follows the actual moved pod routes and the
     # configured network footprint. It is deliberately outside the IT envelope.
     net_y=b.layout['network_origin_m'][1]+max(0,c.network_rows-1)*(c.network_rack_depth_m+c.network_aisle_m)+c.network_rack_depth_m/2
-    north=max(net_y,max(p['route_hint_m'][1] for p in b.g['nodes']))+4
+    # The strip is placed clear of everything generated so far, and then moved by
+    # whatever the arrangement asked for. Offsets rather than an origin, because
+    # where "clear of everything" is depends on the rest of the design.
+    north=max(net_y,max(p['route_hint_m'][1] for p in b.g['nodes']))+4+c.air_offset_y_m
     sy=north;ry=north+2;uy=north+5
     z=max(source_pt[2],3.6);zr=max(sink_pt[2],z+c.return_elevation_offset_m)
     arm=c.fitting_arm_m
@@ -95,7 +98,7 @@ def add_air_cooling(b):
     else:
         new_source,supply=hub(source,sy,z,True);new_sink,ret=hub(sink,ry,zr,False)
         b.g['metadata'].update(fws_source=new_source,fws_sink=new_sink)
-    first_x=max(c.first_rack_x_m, source_pt[0]+4, sink_pt[0]+4)
+    first_x=max(c.first_rack_x_m, source_pt[0]+4, sink_pt[0]+4)+c.air_offset_x_m
     equipment=[]
     def branch(start,x,y,height,unit_port,incoming):
         # Diameter changes remain coaxial, then each top connection has a
@@ -142,6 +145,8 @@ def add_air_cooling(b):
         edge.setdefault('load_group','air_cooling')
     b.g['metadata']['air_cooling']={
         'status':'CONCEPTUAL_CONNECTED', 'heat_W':heat,'equipment_ids':equipment,
+        # Where the strip ended up, so the zone editor has something to drag from.
+        'origin_m':[first_x,uy,0.],
         'architecture':'Parallel two-port CRAH/wall-coil branches on FWS; aggregate air-side heat only.',
         'temperature_status':'UNRESOLVED: selected FWS temperature may be too warm for the required air supply; select a compatible coil or design a separate chilled-water circuit.',
         'source_refs':ledger['source_refs']}

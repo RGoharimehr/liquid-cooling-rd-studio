@@ -79,6 +79,27 @@ class ZoneAndSizingIntegration(unittest.TestCase):
   self.assertEqual([x['status'] for x in gaps],['FAIL','FAIL'])
   self.assertTrue(all(x['actual']>0 for x in gaps))
   self.assertEqual(run(g,c,p)['blocking_failures'],[])
+ def test_air_units_can_be_arranged_and_only_move(self):
+  # The air units had no editable zone at all, so the one thing the plan could
+  # not rearrange was the one bank of equipment standing outside the IT space.
+  c=Config(**PRESETS['rd113']['config']);g,p=build(c)
+  zone=next(z for z in g['layout']['editable_zones'] if z['id']=='air_cooling')
+  self.assertTrue(zone['equipment_ids'])
+  # It is placed relative to whatever else the design generated, so it carries
+  # no rotation parameter and the toolbar has nothing to turn it about.
+  self.assertIsNone(zone.get('rotation_parameter'))
+  from zone_editing import propose_zone_edit
+  out=propose_zone_edit(g,c,'air_cooling',anchor_m=[zone['anchor_m'][0]+5,zone['anchor_m'][1]+2])
+  self.assertTrue(out['valid'])
+  self.assertEqual(out['changes'],{'air_offset_x_m':5.,'air_offset_y_m':2.})
+  moved=replace(c,**out['changes']);g2,p2=build(moved)
+  self.assertEqual(run(g2,moved,p2)['blocking_failures'],[])
+  before={x['id']:x['center_m'] for x in g['components'] if x['kind']=='air_unit'}
+  after={x['id']:x['center_m'] for x in g2['components'] if x['kind']=='air_unit'}
+  self.assertEqual(set(before),set(after))
+  for cid,centre in before.items():
+   self.assertAlmostEqual(after[cid][0],centre[0]+5.)
+   self.assertAlmostEqual(after[cid][1],centre[1]+2.)
  def test_footprint_contains_or_rejects_actual_geometry(self):
   good=replace(self.c,site_footprint_width_m=100,site_footprint_depth_m=100)
   g,p=build(good);self.assertEqual(g['metadata']['footprint_diagnostics']['status'],'PASS')
