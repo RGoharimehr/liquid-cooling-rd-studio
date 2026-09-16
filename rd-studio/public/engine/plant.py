@@ -1,63 +1,6 @@
 """Two hydronic plant layouts, external equipment ports and functional paths."""
 from math import cos,sin,radians,dist
-
-
-def _measure(points):
-    length=sum(dist(p,q) for p,q in zip(points,points[1:]))
-    return length,max(0,len(points)-2)
-
-
-def _plan_routes(b,c,links,service):
-    """Ask the lane router for better waypoints than the deterministic lanes.
-
-    Returns {key: points} for the links it improved. A link is only replaced when
-    the search actually beats the lane it would otherwise use, measured with the
-    same cost, so enabling the optimizer can never lengthen a run. Anything it
-    cannot place legally is left alone and reported.
-    """
-    from route_lanes import LaneRouter,Request,obstacles_from_graph,_collapse,_validate
-    ends=[b.xyz(a) for _,a,d,_,_,_ in links]+[b.xyz(d) for _,a,d,_,_,_ in links]
-    levels=sorted({round(p[2],3) for p in ends})
-    levels+= [z+1.2 for z in levels]
-    router=LaneRouter(
-        obstacles_from_graph(b.g,b.xyz,pipe_half_m=c.route_pipe_clearance_m,
-            equipment_pad_m=c.route_equipment_clearance_m,
-            overfly_top_m=c.ceiling_height_m if c.route_avoid_overfly else None),
-        bend_radius_m=c.bend_radius_m,bend_cost_m=c.route_bend_cost_m,
-        bundle_discount=c.route_bundle_discount,corridor_m=c.route_corridor_m,
-        z_levels=sorted(set(levels)))
-    requests=[Request(key=key,start=tuple(b.xyz(a)),end=tuple(b.xyz(d)),
-                      start_dir=adir,end_dir=ddir,lead_m=2.0,
-                      clearance_m=c.route_pipe_clearance_m,service=service)
-              for key,a,d,adir,ddir,_ in links]
-    results=router.route(requests)
-    report=b.g['metadata'].setdefault('route_optimizer',{}).setdefault('links',[])
-    chosen={}
-    for key,a,d,adir,ddir,fallback in links:
-        res=results[key]
-        base_pts=_collapse([tuple(b.xyz(a))]+[tuple(x) for x in fallback]+[tuple(b.xyz(d))])
-        base_len,base_bends=_measure(base_pts)
-        base_cost=base_len+base_bends*c.route_bend_cost_m
-        row={'link':key,'service':service,'status':res.status,
-             'lane_m':round(base_len,3),'lane_bends':base_bends,
-             'bound_m':round(res.bound_m,3)}
-        if res.status=='routed':
-            cost=res.length_m+res.bends*c.route_bend_cost_m
-            row.update(routed_m=round(res.length_m,3),routed_bends=res.bends,
-                       shared_m=round(res.shared_m,3),
-                       gap_over_bound=round(res.length_m/res.bound_m-1,4) if res.bound_m else None)
-            if cost<base_cost-1e-6:
-                chosen[key]=res.waypoints
-                row['chosen']='optimized'
-                row['saved_m']=round(base_len-res.length_m,3)
-            else:
-                row['chosen']='lane'
-                row['reason']='deterministic lane already at or below the optimised cost'
-        else:
-            row['chosen']='lane'
-            row['reason']=res.reason
-        report.append(row)
-    return chosen
+from route_planning import emit as emit_links
 
 
 def add_plant(b):
@@ -134,21 +77,12 @@ def add_plant(b):
         return endpoints
     # Pumps in a separate corridor west of the chiller bank.
     pi,po=pumps('FWS',c.fws_pump_count,c.fws_pump_spares,(px-8,py))
-    def connect(a,d,points,service):b.route_path(a,d,points,service,'main',basis,group)
-    def emit(links,service):
-        # The optimizer proposes; route_path still builds every component, and a
-        # proposal that will not place legally falls back to the fixed lane.
-        chosen=_plan_routes(b,c,links,service) if c.route_optimizer else {}
-        for key,a,d,adir,ddir,fallback in links:
-            points=chosen.get(key,fallback)
-            try:
-                b.route_path(a,d,points,service,'main',basis,group)
-            except ValueError:
-                if key not in chosen:raise
-                b.g['metadata']['route_optimizer'].setdefault('rejected',[]).append(key)
-                b.route_path(a,d,fallback,service,'main',basis,group)
+    def emit(links,service):emit_links(b,c,links,service,group=group,basis=basis)
     ax,ay,az=b.xyz(s);ix,iy,iz=b.xyz(pi)
-    connect(s,pi,[[px-12,ay,az],[px-12,py-3,az],[px-12,py-3,iz],[ix,py-3,iz]],'FWS')
+    # The bank-to-pump lane crosses the same open floor as the tie-ins and was
+    # the one plant run never offered to the router.
+    emit([('FWS-bank-to-pump',s,pi,(-1,0,0),(0,-1,0),
+           [[px-12,ay,az],[px-12,py-3,az],[px-12,py-3,iz],[ix,py-3,iz]])],'FWS')
     # Put expansion/air separation on the pump suction header as actual ports.
     host=next(comp for comp in reversed(b.g['components']) if comp['kind']=='pipe' and comp['service']=='FWS' and
         abs(b.xyz(comp['ports'][0])[1]-(py+4))<1e-6 and abs(b.xyz(comp['ports'][1])[1]-(py+4))<1e-6 and

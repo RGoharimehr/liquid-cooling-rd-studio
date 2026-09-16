@@ -97,9 +97,12 @@ On RD113 the two are worth 36.6 m of pipe and 5 m of mean rack-to-CDU reach:
 ## Route optimisation
 
 Routing normally uses deterministic service lanes. `route_optimizer` replaces the
-fixed lanes on the plant transport connections - the facility-water tie-ins and the
-condenser-water legs - with a search over a lane graph built from the obstacles
-already in the model. Everything else is unchanged: the optimizer supplies
+fixed lanes on the transport connections - the facility-water tie-ins, the plant's
+bank-to-pump lane, the condenser-water legs and the link from an arranged cooling
+pod back to the facility trunk - with a search over a lane graph built from the
+obstacles already in the model. On RD113 with a pod arranged that is five links
+rather than the two the plant used to offer, and the search is reached from one
+place so a new transport run can be handed to it. Everything else is unchanged: the optimizer supplies
 waypoints, `route_path` still builds every pipe, elbow, node, tag and edge, and
 `geometry_checks.diagnose` remains the acceptance gate.
 

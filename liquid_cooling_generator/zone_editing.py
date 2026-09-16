@@ -8,6 +8,7 @@ Call relocate_pods before plant generation and relocate_equipment after layout.e
 Routes are explicit concept routes and remain subject to ordinary collision checks.
 """
 from math import cos, sin, radians, isfinite
+from route_planning import emit as emit_links
 from zone_geometry import (transform_zone_point, transform_zone_vector, transform_zone_geometry,
                            transform_spec, move_component, equipment_corners, placement_checks)
 
@@ -140,11 +141,17 @@ def relocate_pods(builder):
             step = by-outward[1]*(2*radius+.6)
             path += [[xx, step, top], [approach[0], step, top]]
         path += [[approach[0], approach[1], top], approach]
+        # An arranged pod's link crosses whatever the arrangement left in the way,
+        # which is exactly what the lane router is for. The fly-over above stays
+        # the lane it has to beat.
+        # `face` already points out of the collector's open port, which is what
+        # the router wants at that end, the same as the plant's tie-ins.
+        key = f"FWS-pod-{link['pod']}-{link['label']}"
         try:
             if link['label'] == 'fs':
-                b.route_path(trunk, end, path, 'FWS', 'main', b.fixed(0), group)
+                emit_links(b, b.c, [(key, trunk, end, (1, 0, 0), tuple(face), path)], 'FWS', group=group)
             else:
-                b.route_path(end, trunk, list(reversed(path)), 'FWS', 'main', b.fixed(0), group)
+                emit_links(b, b.c, [(key, end, trunk, tuple(face), (1, 0, 0), list(reversed(path)))], 'FWS', group=group)
         except ValueError as exc:
             raise ValueError(f"Cooling pod {link['pod']} cannot be arranged there: its {link['label']} "
                              f"connection has no explicit route back to the facility trunk ({exc})") from exc
