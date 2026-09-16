@@ -1,4 +1,8 @@
-"""Move complete cooling pods while retaining fixed facility collector connections.
+"""Move complete cooling pods, each with its own facility-water collector.
+
+A pod carries its CDUs, its TCS distribution and its FWS collector, and meets the
+facility at one connection point; only the pair of links from the facility trunk
+to that point is rerouted when the pod is arranged somewhere else.
 
 Call relocate_pods before plant generation and relocate_equipment after layout.equipment.
 Routes are explicit concept routes and remain subject to ordinary collision checks.
@@ -52,47 +56,40 @@ def _specs(builder):
 
 
 def relocate_pods(builder):
-    """Transform TCS/CDUs, then reconnect moved CDU FWS ports to fixed collectors."""
+    """Transform each moved pod with its own FWS collector, then relink it.
+
+    A pod used to leave its facility-water collector behind: every CDU's branch
+    was deleted and rebuilt as its own elevated lane from a pinned tee out to
+    wherever that CDU had gone, and because all the lanes left from the same
+    column they were stacked 0.8 m apart to miss each other. Eight CDUs put the
+    last lane at 11.76 m on RD113, through a 6.5 m ceiling, so the pod could not
+    be arranged at all.
+
+    The collector is part of the pod now, so it travels with it and nothing has
+    to be rebuilt. What is left is one pair of links per pod from the trunk,
+    which share a single fly-over height because each pod leaves on its own
+    column.
+    """
     b = builder
     if b.g['metadata'].get('pod_relocation_applied'):
         return b.g['metadata']['pod_transforms']
     specs = _specs(b)
     bypod = {spec['pod']: spec for spec in specs}
     components = list(b.g['components'])
-    removed_ids = set()
-    reconnect = []
-    # Discover fixed collector roots before removing any per-CDU FWS components.
-    owners = {}
-    for comp in components:
-        for nid in comp.get('ports', []):
-            owners.setdefault(nid, []).append(comp)
-    for cdu in [comp for comp in components if comp['kind'] == 'cdu']:
-        pod = b.cdus[cdu['cdu']-1]
-        if not bypod[pod]['moved']:
-            continue
-        external = [comp for comp in components if comp.get('cdu') == cdu['cdu']
-                    and comp.get('service') == 'FWS' and comp['kind'] != 'cdu']
-        ext_ids = {comp['id'] for comp in external}
-        root_roles = {}
-        for comp in external:
-            if comp['kind'] != 'reducer':
-                continue
-            for index, nid in enumerate(comp['ports']):
-                if any(other['id'] not in ext_ids and other['id'] != cdu['id']
-                       and other.get('service') == 'FWS' for other in owners[nid]):
-                    # Supply reducer starts at its collector; return reducer ends there.
-                    root_roles['fs' if index == 0 else 'fr'] = nid
-        if set(root_roles) != {'fs', 'fr'}:
-            raise ValueError(f"Cannot relocate {cdu['id']}: expected two identifiable FWS collector branches")
-        reconnect.append((cdu, root_roles, ext_ids))
-        removed_ids.update(ext_ids)
+
+    def owner(comp):
+        """The pod this component travels with, or None if it stays put."""
+        if comp['kind'] == 'cdu' or comp.get('cdu'):
+            # A CDU's own branch pieces go with it whichever service they carry.
+            return b.cdus[comp['cdu']-1]
+        if comp.get('zone_pod'):
+            return comp['zone_pod']
+        return comp['pod'] if comp.get('service') == 'TCS' else None
 
     node_pods = {}
     for comp in components:
-        pod = comp.get('pod')
-        if comp.get('kind') == 'cdu':
-            pod = b.cdus[comp['cdu']-1]
-        if pod in bypod and (comp.get('service') == 'TCS' or comp['kind'] == 'cdu'):
+        pod = owner(comp)
+        if pod in bypod:
             for nid in comp.get('ports', []):
                 if nid in node_pods and node_pods[nid] != pod:
                     raise ValueError('Independent pods cannot share a fluid node: '+nid)
@@ -105,55 +102,59 @@ def relocate_pods(builder):
             node['route_hint_m'] = _transform(node['route_hint_m'], bypod[pod])
             if node.get('xyz_m') is not None:
                 node['xyz_m'] = _transform(node['xyz_m'], bypod[pod])
-    b.g['components'] = [comp for comp in components if comp['id'] not in removed_ids]
-    b.g['edges'] = [edge for edge in b.g['edges'] if edge['component_id'] not in removed_ids]
 
-    for cdu, roots, replaced in reconnect:
-        group = (None, None, cdu['cdu'])
-        b.current_pod = b.cdus[cdu['cdu']-1]
-        valves = []
-        for label, port_index in [('fs', 0), ('fr', 1)]:
-            root = roots[label]
-            port = cdu['ports'][port_index]
-            bx, by, bz = b.xyz(root)
-            tx, ty, tz = b.xyz(port)
-            if label == 'fs':
-                red, _ = b.part(root, [bx+.35, by, bz], 'reducer', 'FWS', 'cdu', b.fixed(0), group)
-                start, valve = b.part(red, [bx+.65, by, bz], 'isolation_valve', 'FWS', 'cdu', b.fixed(0), group)
+    links = b.g['metadata'].pop('fws_pod_links', [])
+    radius = b.c.bend_radius_m
+    lead = max(1.0, 3*radius+.05)
+    outward = [float(v) for v in b.g['metadata'].get('fws_interface_dir', [0, 1, 0])]
+    column = {pod: index for index, pod in enumerate(sorted({link['pod'] for link in links}))}
+    for link in links:
+        spec = bypod[link['pod']]
+        b.current_pod = link['pod']
+        group = (None, None, None)
+        trunk, end = link['trunk'], link['pod_end']
+        bx, by, bz = b.xyz(trunk)
+        tx, ty, tz = b.xyz(end)
+        # The collector's open end keeps facing the interface through the
+        # transform, so approach it along that direction rather than assuming +Y.
+        face = transform_zone_vector(outward, spec)
+        approach = [[tx, ty, tz][k]+face[k]*lead for k in range(3)]
+        # Rise and descend on the moved pod's own lane, which is clear at the
+        # takeoff because the pod has left it. Everything the link crosses on the
+        # way is facility water at the one header pair, whatever pod it serves,
+        # so 0.7 m over the return clears all of it: arranging a pod adds one
+        # height, not one height per CDU. A second pod arranged at the same time
+        # takes the next. Only a pod arranged past the TCS spine has to clear the
+        # pod headers as well, and that needs the ceiling to allow it.
+        slot = column[link['pod']]
+        top = b.c.header_elevation_m+b.c.return_elevation_offset_m+.7
+        if max(bx, approach[0]) > -1.0:
+            top = max(top, b.c.header_elevation_m+(b.c.pod_count-1)*b.c.pod_elevation_spacing_m
+                           + b.c.return_elevation_offset_m+.7)
+        top += (.35 if link['label'] == 'fr' else 0.)+slot*.7
+        xx = approach[0]
+        path = [[xx, by, bz], [xx, by, top]]
+        if abs(approach[1]-by) < 2*radius+.02:
+            # The pod came to rest level with its own takeoff. Step the corridor
+            # clear of it so both turns have room for their bends.
+            step = by-outward[1]*(2*radius+.6)
+            path += [[xx, step, top], [approach[0], step, top]]
+        path += [[approach[0], approach[1], top], approach]
+        try:
+            if link['label'] == 'fs':
+                b.route_path(trunk, end, path, 'FWS', 'main', b.fixed(0), group)
             else:
-                start = b.node([bx+.65, by, bz], 'FWS')
-                red, valve = b.part(start, [bx+.35, by, bz], 'isolation_valve', 'FWS', 'cdu', b.fixed(0), group)
-                b.component('reducer', [red, root], 'FWS', 'main', b.fixed(0), group)
-            valves.append(valve['id'])
-            # Each CDU/circuit gets a separate elevated lane; geometry and ceiling
-            # validation decides whether this concept route is physically feasible.
-            radius = b.c.bend_radius_m
-            lead = max(1.0, 3*radius+.05)
-            top = max(bz, tz, b.c.header_elevation_m+b.c.return_elevation_offset_m) + 1.0
-            top += (.35 if label == 'fr' else 0.0)
-            spec=bypod[b.current_pod]
-            if spec['rotation_deg'] or spec.get('flip_x') or spec.get('flip_y') or abs(spec['anchor_m'][1]-spec['original_anchor_m'][1])>.5:top+=(cdu['cdu']-1)*.8
-            xx = bx+.65+lead
-            yy = min(by, ty)-lead-(.4 if label == 'fr' else 0.0)
-            path = [[xx, by, bz], [xx, by, top], [xx, yy, top],
-                    [tx, yy, top], [tx, ty, top]]
-            try:
-                if label == 'fs':
-                    b.route_path(start, port, path, 'FWS', 'cdu', b.fixed(0), group)
-                else:
-                    b.route_path(port, start, list(reversed(path)), 'FWS', 'cdu', b.fixed(0), group)
-            except ValueError as exc:
-                raise ValueError(f"{cdu['id']} {label} relocation cannot fit an explicit route: {exc}") from exc
-        for coupling in b.g['couplings']:
-            if coupling['id'] == cdu['id']:
-                for key in ('isolation_components', 'component_ids'):
-                    coupling[key] = [cid for cid in coupling.get(key, []) if cid not in replaced] + valves
+                b.route_path(end, trunk, list(reversed(path)), 'FWS', 'main', b.fixed(0), group)
+        except ValueError as exc:
+            raise ValueError(f"Cooling pod {link['pod']} cannot be arranged there: its {link['label']} "
+                             f"connection has no explicit route back to the facility trunk ({exc})") from exc
+
     # Drop obsolete branch nodes, retaining Builder.n so new node numbers stay unique.
     used = {nid for comp in b.g['components'] for nid in comp.get('ports', [])}
     b.g['nodes'] = [node for node in b.g['nodes'] if node['id'] in used]
     b.g['metadata']['pod_transforms'] = specs
     b.g['metadata']['pod_relocation_applied'] = True
-    b.g['metadata']['pod_relocation_scope'] = 'Fixed FWS collectors; moved TCS and CDU envelopes. Reconnected routes require collision/ceiling review.'
+    b.g['metadata']['pod_relocation_scope'] = 'Moved each pod with its own TCS and FWS collectors and relinked it to the facility trunk. Reconnected routes require collision/ceiling review.'
     return specs
 
 

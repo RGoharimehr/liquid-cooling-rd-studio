@@ -11,6 +11,12 @@ from topology import Builder
 def assignments(count,pods,explicit):
     return explicit or [min(pods, i*pods//count+1) for i in range(count)]
 
+# How far east of the trunk a moved pod's own collector runs: wide enough for the
+# link corridor between the two, and no wider, because every centimetre of it
+# comes out of the CDU branch's run east to the equipment port.
+POD_LANE_M=1.25
+
+
 def assign_connections(zones,points):
     """Send each zone to the nearest facility point that can still take all of it.
 
@@ -110,49 +116,138 @@ class NetworkBuilder(Builder):
         if c.plant_type=='air_cooled' and c.plant_origin_y_m<(lo+hi)/2:return lo-2.,-1
         return max(1.,hi+2.),1
 
+    def cdu_y(self,i):
+        return self.layout['cdu_origin_m'][1]+(i-1)*self.c.cdu_pitch_m
+
+    def fws_collectors(self,allports,interface_y,outward):
+        """The facility-water corridor: one trunk, and one collector per pod.
+
+        A pod's collector is part of the pod. It gathers that pod's CDUs and
+        nothing else, ends at the pod's connection point, and travels with the
+        pod when it is arranged somewhere else - so only the pair of links back
+        to the trunk has to be rerouted.
+
+        This used to be a single chain through every CDU with the collector
+        pinned in place, and relocate_pods then ran a separate elevated lane from
+        each CDU's tee out to wherever that CDU had gone, stacking them 0.8 m
+        apart because they all left from the same column. On RD113 the eighth
+        lane sat at 11.76 m, through a 6.5 m ceiling, so an eight-CDU pod could
+        not be arranged at all. One link per pod replaces eight per pod and they
+        share a single elevation.
+
+        The trunk runs from the interface out past the pods that stay, and each
+        pod that moves is a tee beyond them, never between an unmoved pod and the
+        plant. Returns the corridor's open end, per-pod connection points, the
+        air-unit tap and the links that relocate_pods still has to build.
+        """
+        c=self.c;z=c.header_elevation_m;zr=z+c.return_elevation_offset_m
+        basis=self.fixed(0);group=(None,None,None);labels=[('fs',-8.,z,True),('fr',-8.65,zr,False)]
+        from zone_editing import _specs
+        specs={spec['pod']:spec for spec in _specs(self)}
+        from air_cooling import heat_ledger
+        # The air units sit north of the hall. When the interface faces south the
+        # corridor's far end is the one beside them, so it stays open for them to
+        # tap rather than sending a branch the length of the hall past every CDU.
+        air=outward<0 and heat_ledger(c)['air_W']>1e-9
+        stay=[p for p in range(1,c.pod_count+1) if not specs[p]['moved']]
+        move=[p for p in range(1,c.pod_count+1) if specs[p]['moved']]
+        joins={};tap={};links=[];previous={};built=[0]
+
+        def takeoff(y,pod,east=True):
+            """One position on the trunk, walking from its far end to the interface."""
+            branches={}
+            for label,x,zz,split in labels:
+                common,other,branch=self.junction([x,y,zz],[0,-outward,0],[1 if east else -1,0,0],'FWS','main',[basis,basis],group,
+                                                  split=split,last=not built[0] and not air)
+                if built[0]:
+                    if split:self.route(other,previous[label],'FWS','main',basis,group)
+                    else:self.route(previous[label],other,'FWS','main',basis,group)
+                elif other is not None:tap[label]=other
+                previous[label]=common;branches[label]=branch
+            built[0]+=1
+            return branches
+
+        # Where each moved pod's connection point comes to rest. The takeoffs have
+        # to sit clear of that, not just clear of where the pods started, or a pod
+        # arranged along the hall lands on top of its own takeoff.
+        from zone_geometry import transform_zone_point
+        def landing(pod,y=None):
+            ys=[self.cdu_y(i) for i in allports if self.cdus[i-1]==pod]
+            if y is None:y=max(ys,key=lambda v:outward*v)+outward*c.fitting_arm_m
+            return transform_zone_point([-8.+POD_LANE_M,y,z],specs[pod])
+        # The whole arranged pod, not just its connection point: a takeoff has to
+        # clear the far end of the pod as well as the end that reaches back to it.
+        reach=[self.cdu_y(i) for i in allports]
+        reach+=[landing(pod,self.cdu_y(i))[1] for pod in move for i in allports if self.cdus[i-1]==pod]
+        spur=max(reach)+2. if outward<0 else min(reach)-2.
+        # Furthest from the interface first: each moved pod tees off out here,
+        # where there is room, and the pods that stay keep a clear run inward.
+        for offset,pod in enumerate(move):
+            self.current_pod=pod
+            # Furthest out first, like the CDUs: the corridor is walked in one
+            # direction and every takeoff has to be nearer the interface than the
+            # one before it, or the run doubles back through its own tee.
+            branches=takeoff(spur-outward*(len(move)-offset)*2.,pod,east=landing(pod)[0]>-8.)
+            for label,_,_,_ in labels:links.append({'pod':pod,'label':label,'trunk':branches[label]})
+        # Same order as the CDUs within a pod: furthest from the interface first,
+        # so the corridor is walked once and ends at the interface.
+        for pod in sorted(stay,key=lambda p:min(outward*self.cdu_y(i) for i in allports if self.cdus[i-1]==p)):
+            self.current_pod=pod
+            for i in sorted((i for i in allports if self.cdus[i-1]==pod),key=lambda i:outward*self.cdu_y(i)):
+                branches=takeoff(self.cdu_y(i),pod)
+                for label,_,_,_ in labels:allports[i][label]=branches[label]
+                joins[pod]={label:previous[label] for label,_,_,_ in labels}
+        source=self.node([-8.,interface_y,z],'FWS','boundary');sink=self.node([-8.65,interface_y,zr],'FWS','boundary')
+        self.route(source,previous['fs'],'FWS','main',basis,group);self.route(previous['fr'],sink,'FWS','main',basis,group)
+
+        # Each moved pod's own collector, built where the pod still is. The
+        # transform in relocate_pods carries it, its CDU branches and its
+        # connection point across together.
+        # A moved pod's collector travels with the pod, so a pod arranged a few
+        # metres along the hall would otherwise come to rest on top of the trunk
+        # it just left. Its own lane, 1.4 m east, clears the trunk and still
+        # leaves each CDU branch its run to the equipment port.
+        lane=[(label,x+POD_LANE_M,zz,split) for label,x,zz,split in labels]
+        for pod in move:
+            self.current_pod=pod;start=len(self.g['components'])
+            local={}
+            for position,i in enumerate(sorted((i for i in allports if self.cdus[i-1]==pod),key=lambda i:outward*self.cdu_y(i))):
+                for label,x,zz,split in lane:
+                    common,other,branch=self.junction([x,self.cdu_y(i),zz],[0,-outward,0],[1,0,0],'FWS','main',[basis,basis],group,
+                                                      split=split,last=position==0)
+                    if position:
+                        if split:self.route(other,local[label],'FWS','main',basis,group)
+                        else:self.route(local[label],other,'FWS','main',basis,group)
+                    local[label]=common;allports[i][label]=branch
+            joins[pod]=dict(local)
+            for comp in self.g['components'][start:]:comp['zone_pod']=pod
+            for link in links:
+                if link['pod']==pod:link['pod_end']=local[link['label']]
+        return source,sink,joins,tap,links
+
     def collectors(self):
         c=self.c;z=c.header_elevation_m;zr=z+c.return_elevation_offset_m
         allports={i:{} for i in range(1,c.cdu_count+1)};ends={}
         interface_y,outward=self.facility_interface()
-        cdu_y=lambda i:self.layout['cdu_origin_m'][1]+(i-1)*c.cdu_pitch_m
-        from air_cooling import heat_ledger
-        # Carry the far end of the trunk two metres clear only when the air units
-        # need it: they sit north of the hall, so when the interface faces south
-        # they tap the trunk end beside them instead of running a branch the
-        # length of the hall past every CDU takeoff.
-        air_tap=outward<0 and heat_ledger(c)['air_W']>1e-9
-        joins={};tap={}
-        for service in ('FWS','TCS'):
-            for pod in (range(1,c.pod_count+1) if service=='TCS' else [0]):
-                self.current_pod=pod or 1
-                units=[i for i in allports if service=='FWS' or self.cdus[i-1]==pod]
-                # One shared corridor, ordered so its open end is the one facing
-                # the facility rather than whichever CDU is numbered first.
-                if service=='FWS':units=sorted(units,key=lambda i:outward*cdu_y(i))
-                previous={}
-                offset=(pod-1)*c.pod_elevation_spacing_m if pod else 0
-                for position,i in enumerate(units):
-                    y=cdu_y(i)
-                    for label,x,zz,split in ([('ts',0,z+offset,False),('tr',-.65,zr+offset,True)] if service=='TCS' else [('fs',-8,z,True),('fr',-8.65,zr,False)]):
-                        axis=[0,-1,0] if service=='TCS' else [0,-outward,0]
-                        common,other,branch=self.junction([x,y,zz],axis,[-1,0,0] if service=='TCS' else [1,0,0],service,'main',[self.fixed(0),self.fixed(0)],(None,None,None),split=split,last=position==0 and not (service=='FWS' and air_tap))
-                        if position:
-                            if split:self.route(other,previous[label],service,'main',self.fixed(0),(None,None,None))
-                            else:self.route(previous[label],other,service,'main',self.fixed(0),(None,None,None))
-                        elif other is not None:tap[label]=other
-                        previous[label]=common;allports[i][label]=branch
-                        if service=='FWS':joins.setdefault(self.cdus[i-1],{})[label]=common
-                ends[pod]=previous if pod else ends.get(pod,{})
-                if service=='FWS':ends[0]=previous
-        # Facility interface: the trunk continues past the last CDU on the side
-        # the plant is on, and both collectors reach it from their open ends.
-        fs=ends[0]['fs'];fr=ends[0]['fr']
-        source=self.node([-8,interface_y,z],'FWS','boundary');sink=self.node([-8.65,interface_y,zr],'FWS','boundary')
-        self.route(source,fs,'FWS','main',self.fixed(0),(None,None,None));self.route(fr,sink,'FWS','main',self.fixed(0),(None,None,None))
+        source,sink,joins,tap,links=self.fws_collectors(allports,interface_y,outward)
+        for pod in range(1,c.pod_count+1):
+            self.current_pod=pod
+            units=[i for i in allports if self.cdus[i-1]==pod]
+            previous={};offset=(pod-1)*c.pod_elevation_spacing_m
+            for position,i in enumerate(units):
+                y=self.cdu_y(i)
+                for label,x,zz,split in [('ts',0,z+offset,False),('tr',-.65,zr+offset,True)]:
+                    common,other,branch=self.junction([x,y,zz],[0,-1,0],[-1,0,0],'TCS','main',[self.fixed(0),self.fixed(0)],(None,None,None),split=split,last=position==0)
+                    if position:
+                        if split:self.route(other,previous[label],'TCS','main',self.fixed(0),(None,None,None))
+                        else:self.route(previous[label],other,'TCS','main',self.fixed(0),(None,None,None))
+                    previous[label]=common;allports[i][label]=branch
+            ends[pod]=previous
         self.g['metadata'].update(fws_source=source,fws_sink=sink,cdu_pump_nodes={},fws_interface_dir=[0,outward,0])
         # An open trunk port, not a routed stub: whoever uses it owns the turn,
         # and a turn only gets an elbow where one route makes the corner.
         if tap:self.g['metadata']['fws_air_tap']={'supply':tap['fs'],'return':tap['fr'],'run_out_m':-2.*outward}
+        if links:self.g['metadata']['fws_pod_links']=links
         self.declare_connections(joins,source,sink,outward)
         for i,ports in allports.items():
             self.current_pod=self.cdus[i-1];self.cdu_assembly(i,**ports)

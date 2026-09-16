@@ -26,7 +26,16 @@ today, so every pod is assigned to it.
 
 The trunk leaves the hall at whichever end faces the plant rather than always at
 the north end, so a pod beside the plant reaches it without first running the
-length of the hall. A water-cooled plant keeps the north interface: its condenser
+length of the hall.
+
+A pod's collector belongs to the pod and travels with it. Arranging a pod
+reroutes one pair of links from the facility trunk to its connection point, at a
+single elevation. It used to leave the collector behind and run a separate
+elevated lane from every CDU, stacked 0.8 m apart to miss each other: on RD113
+the eighth lane sat at 11.76 m, through a 6.5 m ceiling, so an eight-CDU pod
+could not be arranged at all. The corridor the links use is one pipe wide, so
+arranging a second pod at the same time, or arranging one past the TCS spine,
+raises its links over the pod headers and needs the ceiling to allow it. A water-cooled plant keeps the north interface: its condenser
 banks, towers and pumps occupy the south service corridor, and its own FWS ends
 face west and north, so the run would have to cross that circuit.
 

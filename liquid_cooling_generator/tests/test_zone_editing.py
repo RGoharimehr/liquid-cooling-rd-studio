@@ -18,6 +18,26 @@ class ZoneAndSizingIntegration(unittest.TestCase):
   self.assertEqual(new['center_m'][:2],[old['center_m'][0]+2,old['center_m'][1]])
   self.assertEqual(g['metadata']['connectivity_scenarios']['scenarios'][0]['tcs_path_status'],'PASS')
   self.assertTrue(any(x['id']=='pod-1' for x in g['layout']['editable_zones']))
+ def test_an_eight_cdu_pod_arranges_without_stacking_lanes_to_the_ceiling(self):
+  # Each CDU used to get its own elevated lane back to a collector left behind,
+  # stacked 0.8 m apart: the eighth sat at 11.76 m, through a 6.5 m ceiling, so
+  # this pod could not be arranged at all. The collector travels with the pod now.
+  c=Config(**PRESETS['rd113']['config']);base,_=build(c)
+  anchors=[list(s['original_anchor_m'][:2]) for s in base['metadata']['pod_transforms']]
+  self.assertEqual(len(anchors),2)
+  anchors[0][1]-=4.
+  moved,p=build(replace(c,pod_origins_m=anchors))
+  self.assertEqual([s['moved'] for s in moved['metadata']['pod_transforms']],[True,False])
+  top=lambda g:max(n['xyz_m'][2] for n in g['nodes'])
+  self.assertLessEqual(top(moved),top(base)+.35)
+  self.assertLess(top(moved),c.ceiling_height_m-c.overhead_clearance_m)
+  self.assertEqual(run(moved,replace(c,pod_origins_m=anchors),p)['blocking_failures'],[])
+  # The pod's own facility-water pieces went with it rather than being rebuilt.
+  before={x['id']:x['center_m'] for x in base['components'] if x.get('cdu')==1 and x['service']=='FWS' and x.get('center_m')}
+  after={x['id']:x['center_m'] for x in moved['components'] if x.get('cdu')==1 and x['service']=='FWS' and x.get('center_m')}
+  self.assertTrue(before and set(before)<=set(after))
+  for cid,centre in before.items():
+   self.assertAlmostEqual(after[cid][1],centre[1]-4.)
  def test_footprint_contains_or_rejects_actual_geometry(self):
   good=replace(self.c,site_footprint_width_m=100,site_footprint_depth_m=100)
   g,p=build(good);self.assertEqual(g['metadata']['footprint_diagnostics']['status'],'PASS')

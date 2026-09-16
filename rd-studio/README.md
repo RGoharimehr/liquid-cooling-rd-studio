@@ -79,7 +79,8 @@ limitations; the finder never resizes pipes. *Sizing estimates* holds the flow,
 fluid and pressure-budget inputs.
 
 **Connection points.** Each cooling pod and the facility declare where they hand
-over. The plan marks every declared point and names, on hover, the flow it
+over. A pod's collector travels with the pod, so arranging one reroutes a single
+pair of links to its connection point rather than one elevated lane per CDU. The plan marks every declared point and names, on hover, the flow it
 carries, the facility point it is assigned to and the distance to it. A pod takes
 the nearest facility point with capacity for its whole flow. One plant can be
 declared today, so every pod is assigned to it.
