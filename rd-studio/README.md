@@ -85,6 +85,11 @@ carries, the facility point it is assigned to and the distance to it. A pod take
 the nearest facility point with capacity for its whole flow. One plant can be
 declared today, so every pod is assigned to it.
 
+**CDU placement.** *Central gallery* stands each pod's CDUs alongside the rows
+that pod feeds; *End gallery* stands them off the end of the hall. Every design
+reports how far each pod's gallery stands clear of its own rows, so the choice
+has a number rather than a look at the plan. It reports and never blocks.
+
 **CDU outage connectivity** uses the active pipeline. The redundancy input is
 the number of simultaneous outages across all independent pods, and every
 combination is checked. Offline CDUs and their isolation components are removed

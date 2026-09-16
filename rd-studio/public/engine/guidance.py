@@ -22,9 +22,27 @@ def evaluate_guidance(c,g=None):
     check('FWS supply within selected W-class',c.fws_supply_C<=fws[c.fws_class] if c.fws_class in fws else None,c.fws_supply_C,fws.get(c.fws_class,'W+ requires vendor qualification'),'ASHRAE-5 §5.1','FWS W-class is independent of TCS S-class; no fixed W-to-S conversion is applied.')
     check('CDU return-side temperature approach is positive',c.tcs_supply_C+c.tcs_delta_K>c.fws_supply_C+c.fws_delta_K,(c.tcs_supply_C+c.tcs_delta_K)-(c.fws_supply_C+c.fws_delta_K),'> 0 K','ASHRAE-5/6','Boundary temperatures must permit heat transfer at both ends. Actual heat exchanger approach remains vendor-specific.')
     from layout import effective_clearance
+    effective_source='ASHRAE-2 §2.1.5'
     for label,actual,vendor in [('Rack front access',effective_clearance(c,'rack_front'),c.vendor_rack_front_clearance_m),('Rack rear access',effective_clearance(c,'rack_rear'),c.vendor_rack_rear_clearance_m),('CDU service access',effective_clearance(c,'cdu'),c.vendor_cdu_service_clearance_m),('Chiller service access',effective_clearance(c,'chiller'),c.vendor_chiller_service_clearance_m)]:
         check(label,actual>=vendor if vendor else None,actual,vendor or 'Vendor minimum required','ASHRAE-2 §2.1.5','Zero vendor input means missing data, not zero required clearance.')
     check('Hose minimum bend radius',None,c.vendor_hose_min_bend_radius_m or None,'Vendor hose geometry/rating required','ASHRAE-8 §8.4.5','Current rack connections are straight external interface envelopes; hose routing/qualification is unresolved.')
     check('Fluid and wetted-material compatibility',None,{'TCS':c.pg_volume_fraction,'FWS':c.fws_material},'Supplier-approved complete wetted-material list','ASHRAE-7 §7.4','Commonly used materials are not a compatibility endorsement.')
     check('CDU and plant capacity / minimum flow',None,None,'Manufacturer performance/controls','ASHRAE-5 §5.2','No pump head, pressure distribution, transient or hydraulic capacity is solved.')
+    # Where a pod's CDUs stand relative to the rows they feed. Every rack branch
+    # in the pod carries the gap, so it is worth a number rather than a look at
+    # the plan. Standing the gallery off the hall is a legitimate choice, which
+    # is why this reports and does not block.
+    from layout import arrangement, assignments
+    a=(g or {}).get('layout') or arrangement(c)
+    rows=assignments(c.rows,c.pod_count,c.row_pod_assignments)
+    units=assignments(c.cdu_count,c.pod_count,c.cdu_pod_assignments)
+    for pod in sorted(set(units)):
+        served=[a['compute_row_y_m'][i] for i,value in enumerate(rows) if value==pod]
+        mine=[a['cdu_y_m'][i] for i,value in enumerate(units) if value==pod]
+        if not served or not mine:continue
+        gap=max(0.,min(mine)-max(served),min(served)-max(mine))
+        check(f'Cooling pod {pod} CDUs stand with the rows they serve',gap<=c.cdu_pitch_m,round(gap,2),
+              f'no more than {c.cdu_pitch_m:g} m clear of the rows',effective_source,
+              'Clear distance along the hall between this pod\'s CDU gallery and the rows it feeds. '
+              'cdu_placement selects the gallery: central_gallery stands each pod\'s CDUs alongside its own rows.')
     return {'checks':checks,'summary':{status:sum(x['status']==status for x in checks) for status in ('PASS','FAIL','NOT_EVALUABLE')},'scope':'Scoped guidance and declared-input review; not installation certification'}

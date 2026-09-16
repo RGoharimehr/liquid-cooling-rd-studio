@@ -38,6 +38,36 @@ class ZoneAndSizingIntegration(unittest.TestCase):
   self.assertTrue(before and set(before)<=set(after))
   for cid,centre in before.items():
    self.assertAlmostEqual(after[cid][1],centre[1]-4.)
+ def test_a_central_gallery_stands_each_pods_cdus_on_its_own_rows(self):
+  # The CDU collector shared the row distribution spine at x=0, which silently
+  # required the gallery to stand clear of the rows in Y. Centring it on them -
+  # what this placement is for - put the collector tees on the row takeoffs and
+  # blocked the design. The collector has its own lane now.
+  c=Config(**PRESETS['rd113']['config'])
+  for order in ([1,1,2,2],[2,2,1,1]):
+   with self.subTest(rows=order):
+    changed=replace(c,cdu_placement='central_gallery',row_pod_assignments=order,
+                    cdu_pod_assignments=[1,1,1,1,2,2,2,2])
+    g,p=build(changed)
+    self.assertEqual(run(g,changed,p)['blocking_failures'],[])
+    rows=g['metadata']['pod_assignments']['rows'];units=g['metadata']['pod_assignments']['cdus']
+    for pod in (1,2):
+     served=[g['layout']['compute_row_y_m'][i] for i,v in enumerate(rows) if v==pod]
+     mine=[g['layout']['cdu_y_m'][i] for i,v in enumerate(units) if v==pod]
+     # Each pod's gallery overlaps the rows it feeds, whichever way round the
+     # pods were assigned to them.
+     self.assertLess(min(mine),max(served))
+     self.assertGreater(max(mine),min(served))
+    gaps=[x for x in g['metadata']['guidance']['checks'] if 'stand with the rows' in x['check']]
+    self.assertEqual([x['status'] for x in gaps],['PASS','PASS'])
+ def test_an_end_gallery_reports_how_far_it_stands_off_the_rows(self):
+  c=Config(**PRESETS['rd113']['config']);g,p=build(c)
+  gaps=[x for x in g['metadata']['guidance']['checks'] if 'stand with the rows' in x['check']]
+  self.assertEqual(len(gaps),2)
+  # Standing the gallery off the hall is a choice, so this reports and never blocks.
+  self.assertEqual([x['status'] for x in gaps],['FAIL','FAIL'])
+  self.assertTrue(all(x['actual']>0 for x in gaps))
+  self.assertEqual(run(g,c,p)['blocking_failures'],[])
  def test_footprint_contains_or_rejects_actual_geometry(self):
   good=replace(self.c,site_footprint_width_m=100,site_footprint_depth_m=100)
   g,p=build(good);self.assertEqual(g['metadata']['footprint_diagnostics']['status'],'PASS')

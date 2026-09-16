@@ -5,16 +5,20 @@ paths, never extruded as pipes. No pressure/network solver is used.
 """
 from dataclasses import asdict
 from math import dist, cos, sin, radians
+from layout import assignments
 from topology import Builder
 
-
-def assignments(count,pods,explicit):
-    return explicit or [min(pods, i*pods//count+1) for i in range(count)]
 
 # How far east of the trunk a moved pod's own collector runs: wide enough for the
 # link corridor between the two, and no wider, because every centimetre of it
 # comes out of the CDU branch's run east to the equipment port.
 POD_LANE_M=1.25
+
+# The CDU collector runs on its own lane, west of the row distribution spine at
+# x=0. It used to share that spine, which silently required the CDU gallery to
+# stand clear of the rows in Y: centre it on them, as central_gallery is meant
+# to, and the collector tees landed on the row takeoffs.
+TCS_LANE_M=-2.
 
 
 def assign_connections(zones,points):
@@ -111,13 +115,13 @@ class NetworkBuilder(Builder):
         face at all, keep the north corridor until the plant can declare a
         hall-facing connection point of its own.
         """
-        c=self.c;ys=[self.layout['cdu_origin_m'][1]+(i-1)*c.cdu_pitch_m for i in range(1,c.cdu_count+1)]
+        c=self.c;ys=self.layout['cdu_y_m']
         lo,hi=min(ys),max(ys)
         if c.plant_type=='air_cooled' and c.plant_origin_y_m<(lo+hi)/2:return lo-2.,-1
         return max(1.,hi+2.),1
 
     def cdu_y(self,i):
-        return self.layout['cdu_origin_m'][1]+(i-1)*self.c.cdu_pitch_m
+        return self.layout['cdu_y_m'][i-1]
 
     def fws_collectors(self,allports,interface_y,outward):
         """The facility-water corridor: one trunk, and one collector per pod.
@@ -227,22 +231,28 @@ class NetworkBuilder(Builder):
 
     def collectors(self):
         c=self.c;z=c.header_elevation_m;zr=z+c.return_elevation_offset_m
-        allports={i:{} for i in range(1,c.cdu_count+1)};ends={}
+        allports={i:{} for i in range(1,c.cdu_count+1)};ends={};self.pod_gallery_side={}
         interface_y,outward=self.facility_interface()
         source,sink,joins,tap,links=self.fws_collectors(allports,interface_y,outward)
         for pod in range(1,c.pod_count+1):
             self.current_pod=pod
             units=[i for i in allports if self.cdus[i-1]==pod]
+            served=[self.layout['compute_row_y_m'][i] for i,value in enumerate(self.rows) if value==pod]
+            # The gallery leaves on the side from which it can reach the first row
+            # takeoff without passing another one: straight in when it stands
+            # clear of the rows, round the near end when it stands among them.
+            entry=min(served)-c.header_half_separation_m if served else None
+            toward=1 if entry is not None and max(self.cdu_y(i) for i in units)<entry else -1
             previous={};offset=(pod-1)*c.pod_elevation_spacing_m
-            for position,i in enumerate(units):
+            for position,i in enumerate(sorted(units,key=lambda i:toward*self.cdu_y(i))):
                 y=self.cdu_y(i)
-                for label,x,zz,split in [('ts',0,z+offset,False),('tr',-.65,zr+offset,True)]:
-                    common,other,branch=self.junction([x,y,zz],[0,-1,0],[-1,0,0],'TCS','main',[self.fixed(0),self.fixed(0)],(None,None,None),split=split,last=position==0)
+                for label,x,zz,split in [('ts',TCS_LANE_M,z+offset,False),('tr',TCS_LANE_M-.65,zr+offset,True)]:
+                    common,other,branch=self.junction([x,y,zz],[0,-toward,0],[-1,0,0],'TCS','main',[self.fixed(0),self.fixed(0)],(None,None,None),split=split,last=position==0)
                     if position:
                         if split:self.route(other,previous[label],'TCS','main',self.fixed(0),(None,None,None))
                         else:self.route(previous[label],other,'TCS','main',self.fixed(0),(None,None,None))
                     previous[label]=common;allports[i][label]=branch
-            ends[pod]=previous
+            ends[pod]=previous;self.pod_gallery_side[pod]=toward
         self.g['metadata'].update(fws_source=source,fws_sink=sink,cdu_pump_nodes={},fws_interface_dir=[0,outward,0])
         # An open trunk port, not a routed stub: whoever uses it owns the turn,
         # and a turn only gets an elbow where one route makes the corner.
@@ -280,7 +290,7 @@ class NetworkBuilder(Builder):
             'scope':'Geometric and flow-capacity assignment only. No pressure, control-valve authority or plant staging check.'}
 
     def cdu_assembly(self,i,ts,tr,fs,fr):
-        c=self.c;group=(None,None,i);y=self.layout['cdu_origin_m'][1]+(i-1)*c.cdu_pitch_m
+        c=self.c;group=(None,None,i);y=self.cdu_y(i)
         x=self.layout['cdu_origin_m'][0];ports={};ivs=[]
         for label,branch,service,px,inlet in [('ts',ts,'TCS',x+.65,False),('tr',tr,'TCS',x+.05,True),('fs',fs,'FWS',x-1.15,True),('fr',fr,'FWS',x-.55,False)]:
             bx,by,bz=self.xyz(branch);direction=-1 if service=='TCS' else 1
@@ -312,6 +322,21 @@ class NetworkBuilder(Builder):
             'secondary_ports':[ports['tr'],ports['ts']],'heat_W':self.rows.count(self.current_pod)*c.racks_per_row*c.rack_power_W*c.liquid_fraction/self.cdus.count(self.current_pod),'design_capacity_W':None,
             'mass_transfer_kg_s':0.,'isolation_components':ivs,'component_ids':[cid]+ivs,'heat_basis':'Aggregate load allocation; equipment capacity not validated'})
 
+    def enter_spine(self,collector,spine,toward,supply,group):
+        """Link a pod's CDU collector onto its row distribution spine.
+
+        The collector's open port faces along the gallery, so the link leaves
+        along it before it turns: up the lane when the gallery stands clear of
+        the rows, round the near end when it stands among them. Either way it
+        arrives at the spine from south of its first takeoff.
+        """
+        ax,ay,az=self.xyz(collector);tx,ty,_=self.xyz(spine)
+        lead=max(.6,3*self.c.bend_radius_m+.05)
+        lane=min(max(ay+lead,ty-1.),ty-lead) if toward>0 else min(ay-lead,ty-1.)
+        points=[[ax,lane,az],[tx,lane,az]]
+        if supply:self.route_path(collector,spine,points,'TCS','main',self.fixed(0),group)
+        else:self.route_path(spine,collector,points[::-1],'TCS','main',self.fixed(0),group)
+
     def distribution_pods(self):
         c=self.c;original=c.header_elevation_m
         for pod in range(1,c.pod_count+1):
@@ -322,7 +347,14 @@ class NetworkBuilder(Builder):
                 y=self.layout['compute_row_y_m'][ri-1];z=c.header_elevation_m;zr=z+c.return_elevation_offset_m;group=(ri,None,None)
                 sc,sn,sb=self.junction([0,y-c.header_half_separation_m,z],[0,1,0],[1,0,0],'TCS','main',[self.fixed(0),self.fixed(0)],group,last=index==len(selected)-1)
                 rc,rn,rb=self.junction([-.65,y+c.header_half_separation_m,zr],[0,1,0],[1,0,0],'TCS','main',[self.fixed(0),self.fixed(0)],group,split=False,last=index==len(selected)-1)
-                self.route(prev_s,sc,'TCS','main',self.fixed(0),group);self.route(rc,prev_r,'TCS','main',self.fixed(0),group)
+                if index:
+                    self.route(prev_s,sc,'TCS','main',self.fixed(0),group);self.route(rc,prev_r,'TCS','main',self.fixed(0),group)
+                else:
+                    # Come onto the spine from south of its first takeoff, so a
+                    # gallery standing among the rows reaches it round the end
+                    # rather than through every row it passes.
+                    side=self.pod_gallery_side[pod]
+                    self.enter_spine(prev_s,sc,side,True,group);self.enter_spine(prev_r,rc,side,False,group)
                 prev_s,prev_r=sn,rn
                 rs,_=self.part(sb,[.55,y-c.header_half_separation_m,z],'reducer','TCS','row',self.fixed(0),group)
                 rs,_=self.part(rs,[.85,y-c.header_half_separation_m,z],'isolation_valve','TCS','row',self.fixed(0),group)

@@ -7,6 +7,42 @@ def effective_clearance(c, kind):
                         'cdu':'vendor_cdu_service_clearance_m', 'chiller':'vendor_chiller_service_clearance_m'}[kind], 0.)
     return max(project, vendor)
 
+def assignments(count, pods, explicit):
+    """Which pod each row, or each CDU, belongs to."""
+    return explicit or [min(pods, i*pods//count+1) for i in range(count)]
+
+
+def cdu_gallery(c, row_y):
+    """Where each CDU stands, in order.
+
+    A central gallery is centred on the rows it serves, and with independent
+    cooling pods that means each pod's own rows. Centring one column on the whole
+    hall lets a pod's CDUs come to rest beside another pod's racks - on RD113
+    with the pods assigned in the opposite order to the rows, both galleries sit
+    on the wrong half and every rack branch pays for the crossing.
+
+    An end gallery is a deliberate choice to stand the CDUs off the hall, so it
+    keeps its single column at the end, and a custom origin is left alone.
+    """
+    pitch = c.cdu_pitch_m
+    if c.cdu_placement == 'custom':
+        base = c.cdu_origin_y_m
+    elif c.cdu_placement == 'central_gallery':
+        rows = assignments(c.rows, c.pod_count, c.row_pod_assignments)
+        cdus = assignments(c.cdu_count, c.pod_count, c.cdu_pod_assignments)
+        y = {}
+        for pod in sorted(set(cdus)):
+            served = [row_y[i] for i, value in enumerate(rows) if value == pod] or row_y
+            mine = [i for i, value in enumerate(cdus) if value == pod]
+            start = (min(served)+max(served))/2-(len(mine)-1)*pitch/2
+            for offset, index in enumerate(mine):
+                y[index] = start+offset*pitch
+        return [y[i] for i in range(c.cdu_count)]
+    else:
+        base = -2-(c.cdu_count-1)*pitch
+    return [base+i*pitch for i in range(c.cdu_count)]
+
+
 def arrangement(c):
     pitch=c.rack_depth_m+c.aisle_width_m
     access=max(effective_clearance(c,'rack_front'),effective_clearance(c,'rack_rear'))
@@ -21,12 +57,9 @@ def arrangement(c):
     net_span=(max(0,c.network_racks_per_row-1))*c.network_rack_pitch_m
     comp_span=(c.racks_per_row-1)*c.rack_pitch_m
     net_x=c.first_rack_x_m+(comp_span-net_span)/2+c.network_offset_x_m
-    if c.cdu_placement=='custom': ox,oy=c.cdu_origin_x_m,c.cdu_origin_y_m
-    elif c.cdu_placement=='central_gallery':
-        ox=c.cdu_origin_x_m;oy=(row_y[0]+row_y[-1])/2-(c.cdu_count-1)*c.cdu_pitch_m/2
-    else: ox=c.cdu_origin_x_m;oy=-2-(c.cdu_count-1)*c.cdu_pitch_m
+    cdu_y=cdu_gallery(c,row_y)
     return {'compute_row_y_m':row_y,'network_origin_m':[net_x,net_base+c.network_offset_y_m,0],
-            'cdu_origin_m':[ox,oy,0],'network_band_m':network_band,
+            'cdu_origin_m':[c.cdu_origin_x_m,cdu_y[0],0],'cdu_y_m':cdu_y,'network_band_m':network_band,
             'style':c.layout_style,'cdu_placement':c.cdu_placement}
 
 
@@ -66,12 +99,13 @@ def equipment(g,c):
     network_zones=[zone for zone in zones if zone['host'].startswith('NET-')]
     transform_zone_geometry([],network_boxes+network_zones,a['network_origin_m'],
                             getattr(c,'network_rotation_deg',0),getattr(c,'network_flip_x',False),getattr(c,'network_flip_y',False))
-    ox,oy,_=a['cdu_origin_m']
+    ox=a['cdu_origin_m'][0]
     for i in ([] if any(x['kind']=='cdu' for x in g['components']) else range(1,c.cdu_count+1)):
-        add(f'CDU-ENC-{i:02d}','cdu_enclosure',[ox+.15,oy+(i-1)*c.cdu_pitch_m,1.1],[1.8,1.0,2.2],row=None,rack=None,cdu=i,schematic_group='equipment-cdu')
+        oy=a['cdu_y_m'][i-1]
+        add(f'CDU-ENC-{i:02d}','cdu_enclosure',[ox+.15,oy,1.1],[1.8,1.0,2.2],row=None,rack=None,cdu=i,schematic_group='equipment-cdu')
         clear=effective_clearance(c,'cdu')
         for side in (-1,1):
-            zones.append({'id':f'CDU-{i:02d}-service-{side}','host':f'CDU-ENC-{i:02d}','kind':'service_clearance','center_m':[ox+.15+side*(1.8+clear)/2,oy+(i-1)*c.cdu_pitch_m,.02],'size_m':[clear,1.0,.04],'source':'Project CDU service allowance; OEM requirements govern'})
+            zones.append({'id':f'CDU-{i:02d}-service-{side}','host':f'CDU-ENC-{i:02d}','kind':'service_clearance','center_m':[ox+.15+side*(1.8+clear)/2,oy,.02],'size_m':[clear,1.0,.04],'source':'Project CDU service allowance; OEM requirements govern'})
     g['layout']={**a,'equipment_envelopes':boxes,'clearance_zones':zones,
         'network_cooling':'Air-cooled; no invented TCS branches. RD113 R0 diagram-reconciled interpretation.',
         'network_power_W':sum(b.get('power_W',0) for b in boxes if b['kind']=='network_rack')}

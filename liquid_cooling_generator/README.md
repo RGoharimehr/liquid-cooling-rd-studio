@@ -39,6 +39,27 @@ raises its links over the pod headers and needs the ceiling to allow it. A water
 banks, towers and pumps occupy the south service corridor, and its own FWS ends
 face west and north, so the run would have to cross that circuit.
 
+## CDU placement
+
+`cdu_placement` decides where a pod's CDUs stand. `central_gallery` stands each
+pod's CDUs alongside the rows that pod feeds - its own rows, whichever way round
+the pods were assigned to them - and `end_gallery` stands them all off the end of
+the hall, which is a legitimate choice and the reason this reports rather than
+blocks. Every design reports, per pod, how far its gallery stands clear of the
+rows it serves, under *Cooling pod N CDUs stand with the rows they serve*.
+
+The CDU collector runs on its own lane west of the row distribution spine. It
+used to share that spine, which silently required the gallery to stand clear of
+the rows in Y: centring it on them, which is what `central_gallery` is for, put
+the collector tees on the row takeoffs and blocked the design.
+
+On RD113 the two are worth 36.6 m of pipe and 5 m of mean rack-to-CDU reach:
+
+| | rack to its CDU, mean | routed pipe |
+| --- | --- | --- |
+| `end_gallery` | 17.1 m / 20.6 m | 689.3 m |
+| `central_gallery` | 12.4 m / 12.4 m | 652.7 m |
+
 ## Route optimisation
 
 Routing normally uses deterministic service lanes. `route_optimizer` replaces the
